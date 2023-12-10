@@ -151,6 +151,7 @@ project_dict = dict()  # chat id to project
 task_dict = dict()  # chat id to task
 desc_dict = dict()
 INF_TASK_SYMB = "-"
+API_DATE_FORMAT = "%Y-%m-%d"
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -259,8 +260,28 @@ def add_proj_set_new(message):
 
 
 def get_tasks_bot(message):
+    tasks_with_dd = []
+    tasks_without_dd = []
+    for task in get_tasks(message.text):
+        if task is not None and task.due is not None:
+            tasks_with_dd.append(task)
+            continue
+        tasks_without_dd.append(task)
+    tasks_with_dd.sort(key=lambda x: datetime.datetime.strptime(x.due.date, API_DATE_FORMAT))
+
+    output_with_dd = ""
+    priority = 1
+    for task in tasks_with_dd:
+        output_with_dd += f"({priority}) " + task.content + f", deadline: {task.due.date}\n"
+        priority += 1
+
+    output_without_dd = "Вот задания, к которым дедлайн не указан:\n\n"
+    for task in tasks_without_dd:
+        output_without_dd += f"({priority}) " + task.content + ', deadline: not mentioned\n'
+        priority += 1
+
     bot.send_message(message.chat.id,
-                     f'Задачи из проекта "{message.text}": {[el.content for el in get_tasks(message.text)]}')
+                     f'Задачи из проекта "{message.text}":\n' + output_with_dd + output_without_dd)
 
 
 def get_tasks_today_bot(message):
