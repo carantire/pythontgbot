@@ -150,6 +150,7 @@ old_name_dict = dict()  # chat id to old name
 project_dict = dict()  # chat id to project
 task_dict = dict()  # chat id to task
 desc_dict = dict()
+dd_dict = dict()
 INF_TASK_SYMB = "-"
 API_DATE_FORMAT = "%Y-%m-%d"
 
@@ -259,29 +260,32 @@ def add_proj_set_new(message):
     old_name_dict.pop(message.chat.id)
 
 
+
 def get_tasks_bot(message):
     tasks_with_dd = []
     tasks_without_dd = []
     for task in get_tasks(message.text):
-        if task is not None and task.due is not None:
+        if task.due is not None:
             tasks_with_dd.append(task)
             continue
         tasks_without_dd.append(task)
-    tasks_with_dd.sort(key=lambda x: datetime.datetime.strptime(x.due.date, API_DATE_FORMAT))
+    tasks_with_dd.sort(key=lambda x: [datetime.datetime.strptime(x.due.date, API_DATE_FORMAT), -x.priority])
+    tasks_without_dd.sort(key=lambda x: -x.priority)
 
     output_with_dd = ""
-    priority = 1
+    iteration = 1
     for task in tasks_with_dd:
-        output_with_dd += f"({priority}) " + task.content + f", deadline: {task.due.date}\n"
-        priority += 1
+        output_with_dd += f"({iteration}) " + task.content + f", deadline: {task.due.date}, priority = {task.priority}\n"
+        iteration += 1
 
-    output_without_dd = "Вот задания, к которым дедлайн не указан:\n\n"
+    output_without_dd = "\nВот задания, к которым дедлайн не указан:\n"
     for task in tasks_without_dd:
-        output_without_dd += f"({priority}) " + task.content + ', deadline: not mentioned\n'
-        priority += 1
+        output_without_dd += f"({iteration}) " + task.content + f', deadline: not mentioned, priority = {task.priority}\n'
+        iteration += 1
 
     bot.send_message(message.chat.id,
-                     f'Задачи из проекта "{message.text}":\n' + output_with_dd + output_without_dd)
+                     f'Задачи из проекта "{message.text}":\n' + "Приоритет: число от 1 до 4 (1 -- слабый приоритет, 4 -- самый сильный приоритет)\n" +
+                     output_with_dd + output_without_dd)
 
 
 def get_tasks_today_bot(message):
@@ -316,20 +320,28 @@ def add_task_date(message):
     desc_dict[message.chat.id] = message.text
     mesg = bot.send_message(message.chat.id, 'Введите дедлайн в формате YYYY-MM-DD\n'
                                              'Если задание бессрочное, введите символ "-" (минус)')
+    bot.register_next_step_handler(mesg, add_task_deadline)
+
+def add_task_deadline(message):
+    dd_dict[message.chat.id] = message.text if message.text != INF_TASK_SYMB else None
+    mesg = bot.send_message(message.chat.id, 'Введите приоритет (целое число от 1 до 4)\n')
+    # try-except
     bot.register_next_step_handler(mesg, add_task_wrapper)
 
 def add_task_wrapper(message):
-    # idk how to add proper try-except here. Let it be like this
-    deadline_date = message.text
-    if message.text == INF_TASK_SYMB:
-        deadline_date = None
+    try:
+        priority = int(message.text)
+    except:
+        # to do
+        priority = 1
     add_task(content=task_dict[message.chat.id], project_name=project_dict[message.chat.id], description=desc_dict[message.chat.id],
-             due_date=deadline_date)
+             due_date=dd_dict[message.chat.id], priority=priority)
     bot.send_message(message.chat.id,
                      f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"')
     task_dict.pop(message.chat.id)
     project_dict.pop(message.chat.id)
     desc_dict.pop(message.chat.id)
+    dd_dict.pop(message.chat.id)
 
 def get_desc_proj(message):
     desc_dict[message.chat.id] = message.text
