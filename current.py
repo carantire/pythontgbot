@@ -150,7 +150,7 @@ old_name_dict = dict()  # chat id to old name
 project_dict = dict()  # chat id to project
 task_dict = dict()  # chat id to task
 desc_dict = dict()
-
+INF_TASK_SYMB = "-"
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -288,16 +288,27 @@ def add_task_proj(message):
 def add_task_cont(message):
     task_dict[message.chat.id] = message.text
     mesg = bot.send_message(message.chat.id, 'Введите описание задачи')
-    bot.register_next_step_handler(mesg, add_task_desc)
+    bot.register_next_step_handler(mesg, add_task_date)
 
 
-def add_task_desc(message):
-    add_task(content=task_dict[message.chat.id], project_name=project_dict[message.chat.id], description=message.text)
+def add_task_date(message):
+    desc_dict[message.chat.id] = message.text
+    mesg = bot.send_message(message.chat.id, 'Введите дедлайн в формате YYYY-MM-DD\n'
+                                             'Если задание бессрочное, введите символ "-" (минус)')
+    bot.register_next_step_handler(mesg, add_task_wrapper)
+
+def add_task_wrapper(message):
+    # idk how to add proper try-except here. Let it be like this
+    deadline_date = message.text
+    if message.text == INF_TASK_SYMB:
+        deadline_date = None
+    add_task(content=task_dict[message.chat.id], project_name=project_dict[message.chat.id], description=desc_dict[message.chat.id],
+             due_date=deadline_date)
     bot.send_message(message.chat.id,
                      f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"')
     task_dict.pop(message.chat.id)
     project_dict.pop(message.chat.id)
-
+    desc_dict.pop(message.chat.id)
 
 def get_desc_proj(message):
     desc_dict[message.chat.id] = message.text
