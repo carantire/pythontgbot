@@ -132,7 +132,7 @@ def close_task(content, project_name):
 def add_task(content, project_name, due_date=None, desсription=None, priority=1):
     try:
         project_id = get_project_id(project_name)
-        task = api.add_task(content=content, project_id=project_id, due_date=due_date, desсription=desсription, priority=1)
+        task = api.add_task(content=content, project_id=project_id, due_date=due_date, desсription=desсription, priority=priority)
         return task
     except Exception as error:
         return error

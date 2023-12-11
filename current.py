@@ -37,32 +37,44 @@ def get_project_id(project_name):
 
 def delete_project(name):
     id = get_project_id(name)
-    s = api.delete_project(project_id=id)
+    try:
+        s = api.delete_project(project_id=id)
+    except Exception as error:
+        return error
 
 
 def add_project(name, parent_name=None, view_style='list', color="charcoal"):
-    res = get_projects_names()
-    if len(res) >= 7:
-        return 'Переполнение. Купите тариф Про.'
-    parent_id = get_project_id(parent_name)
-    project = api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
-    return project.id
+    try:
+        res = get_projects_names()
+        if len(res) >= 7:
+            return 'Переполнение. Купите тариф Про.'
+        parent_id = get_project_id(parent_name)
+        project = api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
+        return project.id
+    except Exception as error:
+        return (error)
 
 
 def get_projects_names(url=False) -> list:
-    projects = api.get_projects()
-    if url:
-        projects_names = [[project.name, project.url] for project in projects]
-    else:
-        projects_names = [project.name for project in projects]
-    # print(projects_names)
-    return projects_names
+    try:
+        projects = api.get_projects()
+        if (url):
+            projects_names = [[project.name, project.url] for project in projects]
+        else:
+            projects_names = [project.name for project in projects]
+        # print(projects_names)
+        return projects_names
+    except Exception as error:
+        return error
 
 
 def rename_project(old_name, new_name):
-    project_id = get_project_id(old_name)
-    project = api.update_project(project_id=project_id, name=new_name)
-    return project.url
+    try:
+        project_id = get_project_id(old_name)
+        project = api.update_project(project_id=project_id, name=new_name)
+        return project.url
+    except Exception as error:
+        return error
 
 
 def get_tasks(project_name=None):
@@ -99,14 +111,20 @@ def get_task_id(content, project_name):
 
 def close_task(content, project_name):
     task_id = get_task_id(content, project_name)
-    is_success = api.close_task(task_id=task_id)
+    try:
+        is_success = api.close_task(task_id=task_id)
+    except Exception as error:
+        return error
 
 
 def add_task(content, project_name, due_date=None, description=None, priority=1):
-    project_id = get_project_id(project_name)
-    task = api.add_task(content=content, project_id=project_id, due_date=due_date, description=description,
-                        priority=1)
-    return task
+    try:
+        project_id = get_project_id(project_name)
+        task = api.add_task(content=content, project_id=project_id, due_date=due_date, description=description,
+                            priority=1)
+        return task
+    except Exception as error:
+        return error
 
 
 def get_task_description(content, project_name):
@@ -124,6 +142,9 @@ def get_task_description(content, project_name):
 
 import telebot
 from telebot import types
+import requests
+import json
+import os
 
 api_token = '6899437684:AAHuhona7h1r4kPmQTGe-SRULunPkWEqbg0'
 bot = telebot.TeleBot(api_token, exception_handler=logger.ExcHandler())
@@ -132,6 +153,9 @@ old_name_dict = dict()  # chat id to old name
 project_dict = dict()  # chat id to project
 task_dict = dict()  # chat id to task
 desc_dict = dict()
+dd_dict = dict()
+INF_TASK_SYMB = "-"
+API_DATE_FORMAT = "%Y-%m-%d"
 
 
 @bot.message_handler(commands=["start"])
@@ -241,8 +265,30 @@ def add_proj_set_new(message):
 
 
 def get_tasks_bot(message):
+    tasks_with_dd = []
+    tasks_without_dd = []
+    for task in get_tasks(message.text):
+        if task.due is not None:
+            tasks_with_dd.append(task)
+            continue
+        tasks_without_dd.append(task)
+    tasks_with_dd.sort(key=lambda x: [datetime.datetime.strptime(x.due.date, API_DATE_FORMAT), -x.priority])
+    tasks_without_dd.sort(key=lambda x: -x.priority)
+
+    output_with_dd = ""
+    iteration = 1
+    for task in tasks_with_dd:
+        output_with_dd += f"({iteration}) " + task.content + f", deadline: {task.due.date}, priority = {task.priority}\n"
+        iteration += 1
+
+    output_without_dd = "\nВот задания, к которым дедлайн не указан:\n"
+    for task in tasks_without_dd:
+        output_without_dd += f"({iteration}) " + task.content + f', deadline: not mentioned, priority = {task.priority}\n'
+        iteration += 1
+
     bot.send_message(message.chat.id,
-                     f'Задачи из проекта "{message.text}": {[el.content for el in get_tasks(message.text)]}')
+                     f'Задачи из проекта "{message.text}":\n' + "Приоритет: число от 1 до 4 (1 -- слабый приоритет, 4 -- самый сильный приоритет)\n" +
+                     output_with_dd + output_without_dd)
 
 
 def get_tasks_today_bot(message):
@@ -270,18 +316,46 @@ def add_task_proj(message):
 def add_task_cont(message):
     task_dict[message.chat.id] = message.text
     mesg = bot.send_message(message.chat.id, 'Введите описание задачи')
-    bot.register_next_step_handler(mesg, add_task_desc)
+    bot.register_next_step_handler(mesg, add_task_date)
 
 
-def add_task_desc(message):
+def add_task_date(message):
+    desc_dict[message.chat.id] = message.text
+    mesg = bot.send_message(message.chat.id, 'Введите дедлайн в формате YYYY-MM-DD\n'
+                                             'Если задание бессрочное, введите символ "-" (минус)')
+    bot.register_next_step_handler(mesg, add_task_deadline)
+
+
+def add_task_deadline(message):
+    dd_dict[message.chat.id] = message.text if message.text != INF_TASK_SYMB else None
+    mesg = bot.send_message(message.chat.id, 'Введите приоритет (целое число от 1 до 4)\n')
+    # try-except
+    bot.register_next_step_handler(mesg, add_task_wrapper)
+
+
+def add_task_wrapper(message):
     try:
+        current_func = traceback.extract_stack()[-1][2]
+        try:
+            priority = int(message.text)
+        except ValueError:
+            logger.logger.warning(
+                logger.make_logging_log_text(func_name=current_func,
+                                             username=message.from_user.username,
+                                             system_message='Something went wrong with priority of the task.',
+                                             action=f"Attempt to add task '{task_dict[message.chat.id]}'"
+                                                    f"to project '{project_dict[message.chat.id]}'"))
+
+            priority = 1
         add_task(content=task_dict[message.chat.id], project_name=project_dict[message.chat.id],
-                 description=message.text)
+                 description=desc_dict[message.chat.id],
+                 due_date=dd_dict[message.chat.id], priority=priority)
         bot.send_message(message.chat.id,
                          f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"')
         task_dict.pop(message.chat.id)
         project_dict.pop(message.chat.id)
-        current_func = traceback.extract_stack()[-1][2]
+        desc_dict.pop(message.chat.id)
+        dd_dict.pop(message.chat.id)
         logger.logger.debug(
             logger.make_logging_log_text(func_name=current_func,
                                          username=message.from_user.username,
