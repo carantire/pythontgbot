@@ -2,6 +2,9 @@ from todoist_api_python.api import TodoistAPI
 import json
 from datetime import date
 import datetime
+import traceback
+import logger
+import sys
 
 CLIENT_ID = '01fd238f1dca45c0b6a2ffdb3ff9d601'
 CLIENT_SECRET = '51376de7dfe946418eff3c149f11cc54'
@@ -34,44 +37,32 @@ def get_project_id(project_name):
 
 def delete_project(name):
     id = get_project_id(name)
-    try:
-        s = api.delete_project(project_id=id)
-    except Exception as error:
-        return error
+    s = api.delete_project(project_id=id)
 
 
 def add_project(name, parent_name=None, view_style='list', color="charcoal"):
-    try:
-        res = get_projects_names()
-        if len(res) >= 7:
-            return 'Переполнение. Купите тариф Про.'
-        parent_id = get_project_id(parent_name)
-        project = api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
-        return project.id
-    except Exception as error:
-        return (error)
+    res = get_projects_names()
+    if len(res) >= 7:
+        return 'Переполнение. Купите тариф Про.'
+    parent_id = get_project_id(parent_name)
+    project = api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
+    return project.id
 
 
 def get_projects_names(url=False) -> list:
-    try:
-        projects = api.get_projects()
-        if (url):
-            projects_names = [[project.name, project.url] for project in projects]
-        else:
-            projects_names = [project.name for project in projects]
-        # print(projects_names)
-        return projects_names
-    except Exception as error:
-        return error
+    projects = api.get_projects()
+    if url:
+        projects_names = [[project.name, project.url] for project in projects]
+    else:
+        projects_names = [project.name for project in projects]
+    # print(projects_names)
+    return projects_names
 
 
 def rename_project(old_name, new_name):
-    try:
-        project_id = get_project_id(old_name)
-        project = api.update_project(project_id=project_id, name=new_name)
-        return project.url
-    except Exception as error:
-        return error
+    project_id = get_project_id(old_name)
+    project = api.update_project(project_id=project_id, name=new_name)
+    return project.url
 
 
 def get_tasks(project_name=None):
@@ -108,20 +99,14 @@ def get_task_id(content, project_name):
 
 def close_task(content, project_name):
     task_id = get_task_id(content, project_name)
-    try:
-        is_success = api.close_task(task_id=task_id)
-    except Exception as error:
-        return error
+    is_success = api.close_task(task_id=task_id)
 
 
 def add_task(content, project_name, due_date=None, description=None, priority=1):
-    try:
-        project_id = get_project_id(project_name)
-        task = api.add_task(content=content, project_id=project_id, due_date=due_date, description=description,
-                            priority=1)
-        return task
-    except Exception as error:
-        return error
+    project_id = get_project_id(project_name)
+    task = api.add_task(content=content, project_id=project_id, due_date=due_date, description=description,
+                        priority=1)
+    return task
 
 
 def get_task_description(content, project_name):
@@ -139,12 +124,9 @@ def get_task_description(content, project_name):
 
 import telebot
 from telebot import types
-import requests
-import json
-import os
 
 api_token = '6899437684:AAHuhona7h1r4kPmQTGe-SRULunPkWEqbg0'
-bot = telebot.TeleBot(api_token)
+bot = telebot.TeleBot(api_token, exception_handler=logger.ExcHandler())
 
 old_name_dict = dict()  # chat id to old name
 project_dict = dict()  # chat id to project
@@ -292,22 +274,70 @@ def add_task_cont(message):
 
 
 def add_task_desc(message):
-    add_task(content=task_dict[message.chat.id], project_name=project_dict[message.chat.id], description=message.text)
-    bot.send_message(message.chat.id,
-                     f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"')
-    task_dict.pop(message.chat.id)
-    project_dict.pop(message.chat.id)
+    try:
+        add_task(content=task_dict[message.chat.id], project_name=project_dict[message.chat.id],
+                 description=message.text)
+        bot.send_message(message.chat.id,
+                         f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"')
+        task_dict.pop(message.chat.id)
+        project_dict.pop(message.chat.id)
+        current_func = traceback.extract_stack()[-1][2]
+        logger.logger.debug(
+            logger.make_logging_log_text(func_name=current_func,
+                                         username=message.from_user.username,
+                                         action=f"Task '{task_dict[message.chat.id]}' has been successfully added "
+                                                f"to project '{project_dict[message.chat.id]}'"))
+    except Warning as warn:
+        current_func = traceback.extract_stack()[-1][2]
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=current_func, system_message=warn,
+                                         username=message.from_user.username, message_text=message.text,
+                                         action=f"Task '{task_dict[message.chat.id]}' has been successfully added "
+                                                f"to project '{project_dict[message.chat.id]}'"))
+    except Exception as err:
+        current_func = traceback.extract_stack()[-1][2]
+        logger.logger.error(
+            logger.make_logging_err_text(func_name=current_func, error=err, username=message.from_user.username,
+                                         message_text=message.text,
+                                         action=f"Attempt to add task '{task_dict[message.chat.id]}'"
+                                                f"to project '{project_dict[message.chat.id]}'"))
 
 
 def get_desc_proj(message):
-    desc_dict[message.chat.id] = message.text
-    mesg = bot.send_message(message.chat.id, 'Введите название задачи')
-    bot.register_next_step_handler(mesg, get_desc_task)
+    try:
+        desc_dict[message.chat.id] = message.text
+        mesg = bot.send_message(message.chat.id, 'Введите название задачи')
+        bot.register_next_step_handler(mesg, get_desc_task)
+        current_func = traceback.extract_stack()[-1][2]
+        logger.logger.debug(
+            logger.make_logging_log_text(func_name=current_func,
+                                         username=message.from_user.username,
+                                         action='Input of project\'s name for future getting description of a task.'))
+    except Warning as warn:
+        current_func = traceback.extract_stack()[-1][2]
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=current_func, system_message=warn,
+                                         username=message.from_user.username, message_text=message.text,
+                                         action='Input of project\'s name for future getting description of a task.'))
+    except Exception as err:
+        current_func = traceback.extract_stack()[-1][2]
+        logger.logger.error(
+            logger.make_logging_err_text(func_name=current_func, error=err, username=message.from_user.username,
+                                         message_text=message.text,
+                                         action='Input of project\'s name for future getting description of a task.'))
 
 
 def get_desc_task(message):
-    bot.send_message(message.chat.id, f'Описание задачи "{message.text}": '
-                                      f'"{get_task_description(project_name=desc_dict[message.chat.id], content=message.text)}"')
+    desc = get_task_description(project_name=desc_dict[message.chat.id], content=message.text)
+    if desc:
+        bot.send_message(message.chat.id, f'Описание задачи "{message.text}": '
+                                          f'"{desc}"')
+    else:
+        bot.send_message(message.chat.id,
+                         f"Извините, задача '{message.text}' в проекте '{desc_dict[message.chat.id]}' не найдена.")
+        logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                        action='User tried ti get description for a non-existing task.',
+                                                        username=message.from_user.username))
     desc_dict.pop(message.chat.id)
 
 
