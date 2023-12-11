@@ -1,16 +1,28 @@
-from todoist_api_python.api import TodoistAPI
-import json
-from datetime import date
-import datetime
+from datetime import date, datetime
 import traceback
+import telebot
+from telebot import types
+
+from todoist_api_python.api import TodoistAPI
+
 import logger
-import sys
 
 CLIENT_ID = '01fd238f1dca45c0b6a2ffdb3ff9d601'
 CLIENT_SECRET = '51376de7dfe946418eff3c149f11cc54'
 TEST_TOKEN = '48107fa1de46acc615b78411cea73524a10bb75b'
 
 api = TodoistAPI(TEST_TOKEN)
+
+api_token = '6899437684:AAHuhona7h1r4kPmQTGe-SRULunPkWEqbg0'
+bot = telebot.TeleBot(api_token, exception_handler=logger.ExcHandler())
+
+old_name_dict = dict()  # chat id to old name
+project_dict = dict()  # chat id to project
+task_dict = dict()  # chat id to task
+desc_dict = dict()
+dd_dict = dict()
+INF_TASK_SYMB = "-"
+API_DATE_FORMAT = "%Y-%m-%d"
 
 
 def update_api(new_token):
@@ -22,17 +34,17 @@ def update_api(new_token):
 
 def get_project_id(project_name):
     projects = api.get_projects()
-    myprojects = []
+    my_projects = []
     for project in projects:
-        if (project.name == project_name):
-            myprojects.append(project.id)
-    if len(myprojects) <= 0:
+        if project.name == project_name:
+            my_projects.append(project.id)
+    if len(my_projects) <= 0:
         # Not Found
         return None
-    if len(myprojects) > 1:
+    if len(my_projects) > 1:
         # too many objects
         return None
-    return myprojects[0]
+    return my_projects[0]
 
 
 def delete_project(name):
@@ -52,13 +64,13 @@ def add_project(name, parent_name=None, view_style='list', color="charcoal"):
         project = api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
         return project.id
     except Exception as error:
-        return (error)
+        return error
 
 
 def get_projects_names(url=False) -> list:
     try:
         projects = api.get_projects()
-        if (url):
+        if url:
             projects_names = [[project.name, project.url] for project in projects]
         else:
             projects_names = [project.name for project in projects]
@@ -90,8 +102,8 @@ def tasks_today(project_name=None):
     today_tasks = []
     for task in tasks:
         res = task.due
-        if (res != None):
-            if (task.due.date == str(current_date)):
+        if res:
+            if task.due.date == str(current_date):
                 today_tasks.append(task)
     return today_tasks
 
@@ -140,24 +152,6 @@ def get_task_description(content, project_name):
         return None
 
 
-import telebot
-from telebot import types
-import requests
-import json
-import os
-
-api_token = '6899437684:AAHuhona7h1r4kPmQTGe-SRULunPkWEqbg0'
-bot = telebot.TeleBot(api_token, exception_handler=logger.ExcHandler())
-
-old_name_dict = dict()  # chat id to old name
-project_dict = dict()  # chat id to project
-task_dict = dict()  # chat id to task
-desc_dict = dict()
-dd_dict = dict()
-INF_TASK_SYMB = "-"
-API_DATE_FORMAT = "%Y-%m-%d"
-
-
 @bot.message_handler(commands=["start"])
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -188,7 +182,8 @@ def help(message):
     markup.add(types.InlineKeyboardButton("Добавить проект", callback_data='add_project'))
     markup.add(types.InlineKeyboardButton("Изменить имя проекта", callback_data='rename_project'))
     markup.add(types.InlineKeyboardButton("Получить задания из проекта", callback_data='get_tasks'))
-    markup.add(types.InlineKeyboardButton("Получить задания на сегодня из проекта", callback_data='get_tasks_today'))
+    markup.add(types.InlineKeyboardButton("Получить задания на сегодня из проекта",
+                                          callback_data='get_tasks_today'))
     markup.add(types.InlineKeyboardButton("Закрыть задание", callback_data='close_task'))
     markup.add(types.InlineKeyboardButton("Создать задание", callback_data='add_task'))
     markup.add(types.InlineKeyboardButton("Посмотреть описание задания", callback_data='get_description'))
@@ -221,7 +216,8 @@ def callback_message(callback):
         mesg = bot.send_message(callback.message.chat.id, 'Введите название проекта')
         bot.register_next_step_handler(mesg, get_tasks_bot)
     elif callback.data == 'get_tasks_today':
-        bot.send_message(callback.message.chat.id, '__*\> Получить задания на сегодня из проекта:*__', 'MarkdownV2')
+        bot.send_message(callback.message.chat.id, '__*\> Получить задания на сегодня из проекта:*__',
+                         'MarkdownV2')
         mesg = bot.send_message(callback.message.chat.id, 'Введите название проекта')
         bot.register_next_step_handler(mesg, get_tasks_today_bot)
     elif callback.data == 'close_task':
@@ -272,28 +268,32 @@ def get_tasks_bot(message):
             tasks_with_dd.append(task)
             continue
         tasks_without_dd.append(task)
-    tasks_with_dd.sort(key=lambda x: [datetime.datetime.strptime(x.due.date, API_DATE_FORMAT), -x.priority])
+    tasks_with_dd.sort(key=lambda x: [datetime.strptime(x.due.date, API_DATE_FORMAT), -x.priority])
     tasks_without_dd.sort(key=lambda x: -x.priority)
 
     output_with_dd = ""
     iteration = 1
     for task in tasks_with_dd:
-        output_with_dd += f"({iteration}) " + task.content + f", deadline: {task.due.date}, priority = {task.priority}\n"
+        output_with_dd += f"({iteration}) " + task.content + (f", deadline: {task.due.date}, "
+                                                              f"priority = {task.priority}\n")
         iteration += 1
 
     output_without_dd = "\nВот задания, к которым дедлайн не указан:\n"
     for task in tasks_without_dd:
-        output_without_dd += f"({iteration}) " + task.content + f', deadline: not mentioned, priority = {task.priority}\n'
+        output_without_dd += (f"({iteration}) " + task.content +
+                              f', deadline: not mentioned, priority = {task.priority}\n')
         iteration += 1
 
     bot.send_message(message.chat.id,
-                     f'Задачи из проекта "{message.text}":\n' + "Приоритет: число от 1 до 4 (1 -- слабый приоритет, 4 -- самый сильный приоритет)\n" +
+                     f'Задачи из проекта "{message.text}":\n' +
+                     "Приоритет: число от 1 до 4 (1 -- слабый приоритет, 4 -- самый сильный приоритет)\n" +
                      output_with_dd + output_without_dd)
 
 
 def get_tasks_today_bot(message):
     bot.send_message(message.chat.id,
-                     f'Задачи из проекта "{message.text}" на сегодня: {str([el.content for el in tasks_today(message.text)])}')
+                     f'Задачи из проекта "{message.text}" на сегодня: '
+                     f'{str([el.content for el in tasks_today(message.text)])}')
 
 
 def close_task_proj(message):
@@ -304,7 +304,8 @@ def close_task_proj(message):
 
 def close_task_cont(message):
     close_task(message.text, project_dict[message.chat.id])
-    bot.send_message(message.chat.id, f'Задача "{message.text}" из проекта "{project_dict[message.chat.id]}" закрыта')
+    bot.send_message(message.chat.id, f'Задача "{message.text}" из проекта '
+                                      f'"{project_dict[message.chat.id]}" закрыта')
 
 
 def add_task_proj(message):
