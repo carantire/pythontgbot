@@ -21,6 +21,8 @@ project_dict = dict()  # chat id to project
 task_dict = dict()  # chat id to task
 desc_dict = dict()
 dd_dict = dict()
+select_proj_dict = dict() #for func modify
+select_task_dict = dict() #for func modify
 INF_TASK_SYMB = "-"
 API_DATE_FORMAT = "%Y-%m-%d"
 
@@ -152,17 +154,18 @@ def get_task_description(content, project_name):
         return None
 
 
+help_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+help_markup.add(types.KeyboardButton("/help"))
 @bot.message_handler(commands=["start"])
 def start(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("/help"))
+
     bot.send_message(message.chat.id, f"Hello, {message.from_user.full_name}!",
-                     reply_markup=markup)
+                     reply_markup=help_markup)
     mesg = bot.send_message(message.chat.id,
                             f"Пожалуйста, авторизируйтесь. "
                             f"Для этого перейдите на https://app.todoist.com/app/settings/integrations/developer, "
                             f"скопируйте Токен API и пришлите в чат.",
-                            reply_markup=markup)
+                            reply_markup=help_markup)
     bot.register_next_step_handler(mesg, auth)
 
 
@@ -173,11 +176,27 @@ def auth(message):
     help(message)
 
 
+def update_task(old_content, project_name, due_date=None, description=None, priority=1, new_content=None):
+    try:
+        project_id = get_project_id(project_name)
+        # print(1)
+        task_id = get_task_id(old_content, project_name)
+        # print(task_id)
+        if (new_content != None):
+            task = api.update_task(task_id=task_id, content=new_content, project_id=project_id, due_date=due_date,
+                                   description=description, priority=priority)
+        else:
+            task = api.update_task(task_id=task_id, content=old_content, project_id=project_id, due_date=due_date,
+                                   description=description, priority=priority)
+    except Exception as error:
+        return error
+
+
 @bot.message_handler(commands=["help"])
 def help(message):
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("Авторизироваться", callback_data='get_project_id'))
-    markup.add(types.InlineKeyboardButton("Посмотреть id проекта", callback_data='get_project_id'))
+    markup.add(types.InlineKeyboardButton("Посмотреть все проекты", callback_data='get_all_projects'))
     markup.add(types.InlineKeyboardButton("Удалить проект", callback_data='delete_project'))
     markup.add(types.InlineKeyboardButton("Добавить проект", callback_data='add_project'))
     markup.add(types.InlineKeyboardButton("Изменить имя проекта", callback_data='rename_project'))
@@ -187,6 +206,7 @@ def help(message):
     markup.add(types.InlineKeyboardButton("Закрыть задание", callback_data='close_task'))
     markup.add(types.InlineKeyboardButton("Создать задание", callback_data='add_task'))
     markup.add(types.InlineKeyboardButton("Посмотреть описание задания", callback_data='get_description'))
+    markup.add(types.InlineKeyboardButton("Изменить задание", callback_data='modify_task'))
     if message.text == '\\help':
         bot.reply_to(message, "__*Help information:*__", reply_markup=markup, parse_mode='MarkdownV2')
     else:
@@ -231,7 +251,32 @@ def callback_message(callback):
     elif callback.data == 'get_description':
         bot.send_message(callback.message.chat.id, '__*\> Посмотреть описание задания:*__', 'MarkdownV2')
         mesg = bot.send_message(callback.message.chat.id, 'Введите название проекта')
+
         bot.register_next_step_handler(mesg, get_desc_proj)
+    elif callback.data == 'get_all_projects':
+        bot.send_message(callback.message.chat.id, '__*\> Посмотреть все проекты:*__', 'MarkdownV2')
+        output = ''
+        for el in get_projects_names():
+            output += el + '\n'
+        bot.send_message(callback.message.chat.id, f'Ваши проекты: \n {str(output)}')
+    elif callback.data == 'modify_task':
+        bot.send_message(callback.message.chat.id, '__*\> Изменить задание:*__', 'MarkdownV2')
+        projects = get_projects_names()
+        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+        for project in projects:
+            markup.add(types.KeyboardButton("Project: " + str(project)))
+        if (len(projects) == 0):
+            bot.send_message(callback.chat.id, "У вас нет проектов")
+        bot.send_message(callback.message.chat.id, "Ваши проекты", reply_markup=markup)
+
+def write_projects(chat_id, prefix):
+    projects = get_projects_names()
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    for project in projects:
+        markup.add(types.KeyboardButton(prefix + str(project)))
+    if (len(projects) == 0):
+        bot.send_message(chat_id, "У вас нет проектов")
+    bot.send_message(chat_id, "Ваши проекты", reply_markup=markup)
 
 
 def get_proj_id(message):
@@ -260,6 +305,10 @@ def add_proj_set_new(message):
     old_name_dict.pop(message.chat.id)
 
 
+@bot.message_handler(func=lambda message: message.text.startswith("See project: "))
+def priority_handler(message: telebot.types.Message):
+    mesg = bot.send_message(message.chat.id, 'Введите новый приоритет задания (целое число от 1 до 4)')
+    bot.register_next_step_handler(mesg, modify_priority)
 def get_tasks_bot(message):
     tasks_with_dd = []
     tasks_without_dd = []
@@ -353,15 +402,15 @@ def add_task_wrapper(message):
                  due_date=dd_dict[message.chat.id], priority=priority)
         bot.send_message(message.chat.id,
                          f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"')
-        task_dict.pop(message.chat.id)
-        project_dict.pop(message.chat.id)
-        desc_dict.pop(message.chat.id)
-        dd_dict.pop(message.chat.id)
         logger.logger.debug(
             logger.make_logging_log_text(func_name=current_func,
                                          username=message.from_user.username,
                                          action=f"Task '{task_dict[message.chat.id]}' has been successfully added "
                                                 f"to project '{project_dict[message.chat.id]}'"))
+        task_dict.pop(message.chat.id)
+        project_dict.pop(message.chat.id)
+        desc_dict.pop(message.chat.id)
+        dd_dict.pop(message.chat.id)
     except Warning as warn:
         current_func = traceback.extract_stack()[-1][2]
         logger.logger.warning(
@@ -411,9 +460,85 @@ def get_desc_task(message):
         bot.send_message(message.chat.id,
                          f"Извините, задача '{message.text}' в проекте '{desc_dict[message.chat.id]}' не найдена.")
         logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
-                                                        action='User tried ti get description for a non-existing task.',
+                                                        action='User tried to get description for a non-existing task.',
                                                         username=message.from_user.username))
     desc_dict.pop(message.chat.id)
+
+@bot.message_handler(func=lambda message: message.text.startswith("Project: "))
+def modify_task(message: telebot.types.Message):
+    tasks = get_tasks(message.text[9:])
+    select_proj_dict[message.chat.id] = message.text[9:]
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    for task in tasks:
+        markup.add(types.KeyboardButton("Task: " + str(task.content)))
+    if not tasks:
+        bot.reply_to(message, "В данном проекте нет заданий")
+    bot.send_message(message.chat.id, "Выберите задание из списка:", reply_markup=markup)
+@bot.message_handler(func=lambda message: message.text.startswith("Task: "))
+def task_handler(message: telebot.types.Message):
+    select_task_dict[message.chat.id] = message.text[6:]
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    markup.add("Content")
+    markup.add("Description")
+    markup.add("Deadline")
+    markup.add("Priority")
+    bot.send_message(message.chat.id, "Выберите тип изменения", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text.startswith("Content"))
+def content_handler(message: telebot.types.Message):
+    mesg = bot.send_message(message.chat.id, "Введите новое название задачи")
+    bot.register_next_step_handler(mesg, modify_content)
+
+def modify_content(message):
+    update_task(old_content=select_task_dict[message.chat.id], project_name=select_proj_dict[message.chat.id], new_content=message.text)
+    select_task_dict.pop(message.chat.id)
+    select_proj_dict.pop(message.chat.id)
+    markup = types.ReplyKeyboardMarkup()
+    markup.add("/help")
+    bot.send_message(message.chat.id, "Задание успешно переименовано", reply_markup=markup)
+@bot.message_handler(func=lambda message: message.text.startswith("Description"))
+def description_handler(message: telebot.types.Message):
+    mesg = bot.send_message(message.chat.id, "Введите новое название задачи")
+    bot.register_next_step_handler(mesg, modify_description)
+
+def modify_description(message):
+    update_task(old_content=select_task_dict[message.chat.id], project_name=select_proj_dict[message.chat.id], description=message.text)
+    select_task_dict.pop(message.chat.id)
+    select_proj_dict.pop(message.chat.id)
+    markup = types.ReplyKeyboardMarkup()
+    markup.add("/help")
+    bot.send_message(message.chat.id, "Описание задания успешно изменено", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text.startswith("Deadline"))
+def deadline_handler(message: telebot.types.Message):
+    mesg = bot.send_message(message.chat.id, 'Введите дедлайн в формате YYYY-MM-DD\n'
+                                             'Если задание бессрочное, введите символ "-" (минус)')
+    bot.register_next_step_handler(mesg, modify_deadline)
+
+def modify_deadline(message):
+    if (message.text == '-'):
+        update_task(old_content=select_task_dict[message.chat.id], project_name=select_proj_dict[message.chat.id], due_date=None)
+    else:
+        update_task(old_content=select_task_dict[message.chat.id], project_name=select_proj_dict[message.chat.id], due_date=message.text)
+    select_task_dict.pop(message.chat.id)
+    select_proj_dict.pop(message.chat.id)
+    markup = types.ReplyKeyboardMarkup()
+    markup.add("/help")
+    bot.send_message(message.chat.id, "Дедлайн задания успешно изменен", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text.startswith("Priority"))
+def priority_handler(message: telebot.types.Message):
+    mesg = bot.send_message(message.chat.id, 'Введите новый приоритет задания (целое число от 1 до 4)')
+    bot.register_next_step_handler(mesg, modify_priority)
+
+def modify_priority(message):
+    update_task(old_content=select_task_dict[message.chat.id], project_name=select_proj_dict[message.chat.id], priority=message.text)
+    select_task_dict.pop(message.chat.id)
+    select_proj_dict.pop(message.chat.id)
+    markup = types.ReplyKeyboardMarkup()
+    markup.add("/help")
+    bot.send_message(message.chat.id, "Приоритет задания успешно изменен", reply_markup=markup)
+
 
 
 bot.infinity_polling()
