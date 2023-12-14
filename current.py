@@ -215,22 +215,16 @@ def help(message):
 
 @bot.callback_query_handler(func=lambda callback: True)
 def callback_message(callback):
-    if callback.data == 'get_project_id':
-        bot.send_message(callback.message.chat.id, '__*\> Посмотреть id проекта:*__', 'MarkdownV2')
-        mesg = bot.send_message(callback.message.chat.id, 'Введите название проекта')
-        bot.register_next_step_handler(mesg, get_proj_id)
-    elif callback.data == 'delete_project':
+    if callback.data == 'delete_project':
         bot.send_message(callback.message.chat.id, '__*\> Удалить проект:*__', 'MarkdownV2')
-        mesg = bot.send_message(callback.message.chat.id, 'Введите название проекта')
-        bot.register_next_step_handler(mesg, del_proj_id)
+        write_projects(callback.message.chat.id, "Close project: ")
     elif callback.data == 'add_project':
         bot.send_message(callback.message.chat.id, '__*\> Добавить проект:*__', 'MarkdownV2')
         mesg = bot.send_message(callback.message.chat.id, 'Введите название проекта')
         bot.register_next_step_handler(mesg, add_proj)
     elif callback.data == 'rename_project':
         bot.send_message(callback.message.chat.id, '__*\> Изменить имя проекта:*__', 'MarkdownV2')
-        mesg = bot.send_message(callback.message.chat.id, 'Введите старое название проекта')
-        bot.register_next_step_handler(mesg, rename_proj)
+        write_projects(callback.message.chat.id, "Change name: ")
     elif callback.data == 'get_tasks':
         bot.send_message(callback.message.chat.id, '__*\> Получить задания из проекта:*__', 'MarkdownV2')
         write_projects(callback.message.chat.id, "Get tasks from: ")
@@ -243,13 +237,10 @@ def callback_message(callback):
         write_projects(callback.message.chat.id, "Close task from: ")
     elif callback.data == 'add_task':
         bot.send_message(callback.message.chat.id, '__*\> Создать задание:*__', 'MarkdownV2')
-        mesg = bot.send_message(callback.message.chat.id, 'Введите название проекта')
-        bot.register_next_step_handler(mesg, add_task_proj)
+        write_projects(callback.message.chat.id, "Add task to: ")
     elif callback.data == 'get_description':
         bot.send_message(callback.message.chat.id, '__*\> Посмотреть описание задания:*__', 'MarkdownV2')
-        mesg = bot.send_message(callback.message.chat.id, 'Введите название проекта')
-
-        bot.register_next_step_handler(mesg, get_desc_proj)
+        write_projects(callback.message.chat.id, "Get description from: ")
     elif callback.data == 'get_all_projects':
         bot.send_message(callback.message.chat.id, '__*\> Посмотреть все проекты:*__', 'MarkdownV2')
         output = ''
@@ -269,8 +260,8 @@ def write_projects(chat_id, prefix):
         bot.send_message(chat_id, "У вас нет проектов")
     bot.send_message(chat_id, "Ваши проекты", reply_markup=markup)
 def write_tasks(message, get_prefix, set_prefix):
-    tasks = get_tasks(message.text[get_prefix:])
-    select_proj_dict[message.chat.id] = message.text[get_prefix:]
+    tasks = get_tasks(message.text[len(get_prefix):])
+    select_proj_dict[message.chat.id] = message.text[len(get_prefix):]
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
     for task in tasks:
         markup.add(types.KeyboardButton(set_prefix + str(task.content)))
@@ -279,29 +270,29 @@ def write_tasks(message, get_prefix, set_prefix):
     bot.send_message(message.chat.id, "Выберите задание из списка:", reply_markup=markup)
 
 
-def get_proj_id(message):
-    bot.send_message(message.chat.id, f'id "{message.text}" проекта: {get_project_id(message.text)}')
-
-
+@bot.message_handler(func = lambda message: message.text.startswith("Close project: "))
 def del_proj_id(message):
-    delete_project(message.text)
-    bot.send_message(message.chat.id, f'Проект "{message.text}" удален')
+    delete_project(message.text[len("Close project: "):])
+    bot.send_message(message.chat.id, f'Проект "{message.text[len("Close project: "):]}" удален')
 
 
 def add_proj(message):
     add_project(message.text)
     bot.send_message(message.chat.id, f'Проект "{message.text}" добавлен')
 
+@bot.message_handler(func=lambda message: message.text.startswith("Change name: "))
 
 def rename_proj(message):
-    old_name_dict[message.chat.id] = message.text
+    old_name_dict[message.chat.id] = message.text[len("Change name: "):]
     mesg = bot.send_message(message.chat.id, 'Введите новое название проекта')
     bot.register_next_step_handler(mesg, add_proj_set_new)
 
 
 def add_proj_set_new(message):
     rename_project(old_name_dict[message.chat.id], message.text)
-    bot.send_message(message.chat.id, f'Проект "{old_name_dict[message.chat.id]}" переименован в "{message.text}"')
+    markup = types.ReplyKeyboardMarkup()
+    markup.add("/help")
+    bot.send_message(message.chat.id, f'Проект "{old_name_dict[message.chat.id]}" переименован в "{message.text}"', reply_markup=markup)
     old_name_dict.pop(message.chat.id)
 
 
@@ -348,7 +339,7 @@ def get_tasks_today_bot(message: telebot.types.Message):
 @bot.message_handler(func=lambda message: message.text.startswith("Close task from: "))
 def close_task_proj(message: telebot.types.Message):
     project_dict[message.chat.id] = message.text
-    write_tasks(message, len("Close task from: "), "Close: ")
+    write_tasks(message, "Close task from: ", "Close: ")
 
 @bot.message_handler(func=lambda message: message.text.startswith("Close: "))
 def close_task_task(message: telebot.types.Message):
@@ -356,12 +347,12 @@ def close_task_task(message: telebot.types.Message):
     markup = types.ReplyKeyboardMarkup()
     markup.add("/help")
     bot.send_message(message.chat.id, f'Задача "{message.text[len("Close: "):]}" из проекта '
-                                      f'"{project_dict[message.chat.id]}" закрыта', reply_markup=markup)
+                                      f'"{project_dict[message.chat.id][len("Close task from: "):]}" закрыта', reply_markup=markup)
     project_dict.pop(message.chat.id)
 
-
+@bot.message_handler(func = lambda message: message.text.startswith("Add task to: "))
 def add_task_proj(message):
-    project_dict[message.chat.id] = message.text
+    project_dict[message.chat.id] = message.text[len("Add task to: "):]
     mesg = bot.send_message(message.chat.id, 'Введите название задачи')
     bot.register_next_step_handler(mesg, add_task_cont)
 
@@ -387,6 +378,8 @@ def add_task_deadline(message):
 
 
 def add_task_wrapper(message):
+    markup = types.ReplyKeyboardMarkup()
+    markup.add("/help")
     try:
         current_func = traceback.extract_stack()[-1][2]
         try:
@@ -404,7 +397,7 @@ def add_task_wrapper(message):
                  description=desc_dict[message.chat.id],
                  due_date=dd_dict[message.chat.id], priority=priority)
         bot.send_message(message.chat.id,
-                         f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"')
+                         f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"', reply_markup=markup)
         logger.logger.debug(
             logger.make_logging_log_text(func_name=current_func,
                                          username=message.from_user.username,
@@ -429,12 +422,11 @@ def add_task_wrapper(message):
                                          action=f"Attempt to add task '{task_dict[message.chat.id]}'"
                                                 f"to project '{project_dict[message.chat.id]}'"))
 
-
+@bot.message_handler(func=lambda message: message.text.startswith("Get description from: "))
 def get_desc_proj(message):
     try:
-        desc_dict[message.chat.id] = message.text
-        mesg = bot.send_message(message.chat.id, 'Введите название задачи')
-        bot.register_next_step_handler(mesg, get_desc_task)
+        desc_dict[message.chat.id] = message.text[len("Get description from: "):]
+        write_tasks(message, "Get description from: ", "Task description: ")
         current_func = traceback.extract_stack()[-1][2]
         logger.logger.debug(
             logger.make_logging_log_text(func_name=current_func,
@@ -453,19 +445,22 @@ def get_desc_proj(message):
                                          message_text=message.text,
                                          action='Input of project\'s name for future getting description of a task.'))
 
-
+@bot.message_handler(func=lambda message: message.text.startswith("Task description: "))
 def get_desc_task(message):
-    desc = get_task_description(project_name=desc_dict[message.chat.id], content=message.text)
+    desc = get_task_description(project_name=desc_dict[message.chat.id], content=message.text[len("Task description: "):])
+    markup = types.ReplyKeyboardMarkup()
+    markup.add("/help")
     if desc:
-        bot.send_message(message.chat.id, f'Описание задачи "{message.text}": '
-                                          f'"{desc}"')
+        bot.send_message(message.chat.id, f'Описание задачи "{message.text[len("Task description: "):]}": '
+                                          f'"{desc}"', reply_markup=markup)
     else:
         bot.send_message(message.chat.id,
-                         f"Извините, задача '{message.text}' в проекте '{desc_dict[message.chat.id]}' не найдена.")
+                         f"Извините, задача '{message.text}' в проекте '{desc_dict[message.chat.id]}' не найдена.", reply_markup=markup)
         logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
                                                         action='User tried to get description for a non-existing task.',
                                                         username=message.from_user.username))
     desc_dict.pop(message.chat.id)
+
 
 @bot.message_handler(func=lambda message: message.text.startswith("Project: "))
 def modify_task(message: telebot.types.Message):
