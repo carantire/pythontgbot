@@ -28,137 +28,333 @@ API_DATE_FORMAT = "%Y-%m-%d"
 
 
 def get_api(chat_id: int) -> TodoistAPI:
-    user_token = users_database[users_database['chat_id'] == chat_id]['token'].values[0]
-    api = TodoistAPI(user_token)
-    return api
-
-
-def get_project_id(api, project_name):
-    projects = api.get_projects()
-    my_projects = []
-    for project in projects:
-        if project.name == project_name:
-            my_projects.append(project.id)
-    if len(my_projects) <= 0:
-        # Not Found
-        return None
-    if len(my_projects) > 1:
-        # too many objects
-        return None
-    return my_projects[0]
-
-
-def delete_project(api, name):
-    id = get_project_id(api, name)
     try:
-        s = api.delete_project(project_id=id)
-    except Exception as error:
-        return error
+        user_token = users_database[users_database['chat_id'] == chat_id]['token'].values
+        while len(user_token) < 1:
+            logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                            action=f'Non-authorised user tried to do smth. '
+                                                                   f'Chat_id: {chat_id}'))
+            bot.next_step_backend = None
+            bot.send_message(chat_id, "Упс, кажется, вы не авторизированы.")
+            start()
+            user_token = users_database[users_database['chat_id'] == chat_id]['token'].values
+        api = TodoistAPI(user_token[0])
+        return api
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
+                                         action=f'Getting token API for user, chat_id={chat_id}'))
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_err_text(func_name=traceback.extract_stack()[-1][2], error=err,
+                                         action=f'Getting token API for user, chat_id={chat_id}'))
 
 
-def add_project(api, name, parent_name=None, view_style='list', color="charcoal"):
+def get_project_id(api: TodoistAPI, project_name: str):
+    try:
+        projects = api.get_projects()
+        my_projects = []
+        for project in projects:
+            if project.name == project_name:
+                my_projects.append(project.id)
+        if len(my_projects) <= 0:
+            logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                            action=f"Attempt to get id for project '{project_name}'. "
+                                                                   f"Failed: no projects with such name found."))
+            return -1
+        if len(my_projects) > 1:
+            logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                            action=f"Attempt to get id for project '{project_name}'. "
+                                                                   f"Failed: too many projects ({len(my_projects)}) "
+                                                                   f"with such name."))
+            return -1
+        logger.logger.debug(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                         action=f"Got id for project '{project_name}': {my_projects[0]}."))
+        return my_projects[0]
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
+                                         action=f"Attempt to get id for project '{project_name}'."))
+        return -1
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=err,
+                                         action=f"Attempt to get id for project '{project_name}'."))
+        return -1
+
+
+def delete_project(api: TodoistAPI, name: str) -> bool:
+    try:
+        id = get_project_id(api, name)
+        if id == -1:
+            raise RuntimeError(f'No project with name {name} found.')
+        api.delete_project(project_id=id)
+        logger.logger.debug(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                         action=f"Project '{name}' deleted successfully."))
+        return True
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
+                                         action=f"Attempt to delete project '{name}'."))
+        return False
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=err,
+                                         action=f"Attempt to delete project '{name}'."))
+        return False
+
+
+def add_project(api: TodoistAPI, name: str, chat_id: int, parent_name=None, view_style='list',
+                color="charcoal") -> bool:
     try:
         res = get_projects_names(api)
         if len(res) >= 7:
-            return 'Переполнение. Купите тариф Про.'
+            logger.logger.info(
+                logger.make_logging_log_text(func_name='add_project',
+                                             action=f"Attempt to add project '{name}', but need Pro "
+                                                    f"to add more projects. Chat_id: {chat_id}"))
+            bot.send_message(chat_id, 'Слишком много проектов. Купите тариф Про.')
+            return False
         parent_id = get_project_id(api, parent_name)
-        project = api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
-        return project.id
-    except Exception as error:
-        return error
+        if parent_id == -1:
+            raise RuntimeError(f'No project with name {parent_name} found.')
+        api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
+        logger.logger.debug(
+            logger.make_logging_log_text(func_name='add_project',
+                                         action=f"Successfully added project '{name}'. Chat_id: {chat_id}"))
+        return True
+
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name='add_project', system_message=warn,
+                                         action=f"Attempt to add project '{name}'."))
+        return False
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name='add_project', system_message=err,
+                                         action=f"Attempt to add project '{name}'."))
+        return False
 
 
 def get_projects_names(api, url=False) -> list:
     try:
         projects = api.get_projects()
-
         if url:
             projects_names = [[project.name, project.url] for project in projects if project.name != 'Inbox']
         else:
             projects_names = [project.name for project in projects if project.name != 'Inbox']
+
+        logger.logger.debug(
+            logger.make_logging_log_text(func_name='get_projects_names',
+                                         action=f"Got names of projects."))
         return projects_names
-    except Exception as error:
-        return error
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name='get_projects_names', system_message=warn,
+                                         action=f"Attempt to get names of projects."))
+        return []
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name='get_projects_names', system_message=err,
+                                         action=f"Attempt to get names of projects."))
+        return []
 
 
-def rename_project(api, old_name, new_name):
+def rename_project(api: TodoistAPI, old_name: str, new_name: str) -> bool:
     try:
         project_id = get_project_id(api, old_name)
+        if project_id == -1:
+            raise RuntimeError(f'No project with name {old_name} found.')
         project = api.update_project(project_id=project_id, name=new_name)
-        return project.url
-    except Exception as error:
-        return error
+        logger.logger.debug(
+            logger.make_logging_log_text(func_name='rename_project',
+                                         action=f"Attempt rename project '{old_name}' to '{new_name}'."))
+        return True
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name='rename_project', system_message=warn,
+                                         action=f"Attempt rename project '{old_name}' to '{new_name}'."))
+        return False
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name='rename_project', system_message=err,
+                                         action=f"Attempt rename project '{old_name}' to '{new_name}'."))
+        return False
 
 
-def get_tasks(api, project_name=None):
-    project_id = get_project_id(api, project_name)
-    tasks = api.get_tasks(project_id=project_id)
-    return tasks
-
-
-def tasks_today(api, project_name=None):
-    project_id = get_project_id(api, project_name)
-    tasks = api.get_tasks(project_id=project_id)
-    current_date = date.today()
-    today_tasks = []
-    for task in tasks:
-        res = task.due
-        if res:
-            if task.due.date == str(current_date):
-                today_tasks.append(task)
-    return today_tasks
-
-
-def get_task_id(api, content, project_name):
-    project_id = get_project_id(api, project_name)
-    tasks = api.get_tasks(project_id=project_id)
-    res = []
-    for task in tasks:
-        if task.content == content:
-            res.append(task.id)
-    if len(res) == 1:
-        return res[0]
-    else:
-        return None
-
-
-def close_task(api, content, project_name):
-    task_id = get_task_id(api, content, project_name)
-    try:
-        is_success = api.close_task(task_id=task_id)
-    except Exception as error:
-        return error
-
-
-def add_task(api, content, project_name, due_date=None, description=None, priority=1):
+def get_tasks(api: TodoistAPI, project_name: str) -> list:
     try:
         project_id = get_project_id(api, project_name)
-        task = api.add_task(content=content, project_id=project_id, due_date=due_date, description=description,
-                            priority=1)
-        return task
-    except Exception as error:
-        return error
+        if project_id == -1:
+            raise RuntimeError(f'No project with name {project_name} found.')
+        tasks = api.get_tasks(project_id=project_id)
+        logger.logger.debug(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                         action=f"Got all tasks from project '{project_name}'."))
+        return tasks
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name='get_tasks', system_message=warn,
+                                         action=f"Attempt to get tasks from project {project_name}."))
+        return []
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name='get_tasks', system_message=err,
+                                         action=f"Attempt to get tasks from project {project_name}."))
+        return []
 
 
-def get_task_description(api, content, project_name):
-    project_id = get_project_id(api, project_name)
-    tasks = api.get_tasks(project_id=project_id)
-    res = []
-    for task in tasks:
-        if task.content == content:
-            res.append(task.description)
-    if len(res) == 1:
-        return res[0]
-    else:
+def tasks_today(api: TodoistAPI, project_name: str) -> list:
+    try:
+        project_id = get_project_id(api, project_name)
+        if project_id == -1:
+            raise RuntimeError(f'No project with name {project_name} found.')
+        tasks = api.get_tasks(project_id=project_id)
+        current_date = date.today()
+        today_tasks = []
+        for task in tasks:
+            res = task.due
+            if res:
+                if task.due.date == str(current_date):
+                    today_tasks.append(task)
+        logger.logger.debug(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                         action=f"Got all tasks for today from project '{project_name}'."))
+        return today_tasks
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name='tasks_today', system_message=warn,
+                                         action=f"Attempt to get tasks for today from project {project_name}."))
+        return []
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name='tasks_today', system_message=err,
+                                         action=f"Attempt to get tasks for today from project {project_name}."))
+        return []
+
+
+def get_task_id(api: TodoistAPI, content: str, project_name: str):
+    try:
+        project_id = get_project_id(api, project_name)
+        if project_id == -1:
+            raise RuntimeError(f'No project with name {project_name} found.')
+        tasks = api.get_tasks(project_id=project_id)
+        res = []
+        for task in tasks:
+            if task.content == content:
+                res.append(task.id)
+        if len(res) == 1:
+            return res[0]
+        else:
+            logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                            action=f"Attempt to get task id for task from {project_name}"
+                                                                   f" with content '{content}', "
+                                                                   f"but too many tasks found({len(res)})."))
+            return ''
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name='get_task_id', system_message=warn,
+                                         action=f"Attempt to get task id for {project_name}."))
+        return ''
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name='get_task_id', system_message=err,
+                                         action=f"Attempt to get tasks for today from project {project_name}."))
+        return ''
+
+
+def close_task(api: TodoistAPI, content: str, project_name: str) -> bool:
+    try:
+        task_id = get_task_id(api, content, project_name)
+        is_success = api.close_task(task_id=task_id)
+        if is_success:
+            logger.logger.debug(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                             action=f"Successfully closed task with id {task_id} "
+                                                                    f"from project {project_name}."))
+        else:
+            logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                            action=f"Couldn't close task with id {task_id} "
+                                                                   f"from project {project_name}."))
+        return is_success
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
+                                         action=f"Attempt to get task id for {project_name}."))
+        return False
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=err,
+                                         action=f"Attempt to get tasks for today from project {project_name}."))
+        return False
+
+
+def add_task(api: TodoistAPI, content: str, project_name: str, due_date=None, description: str | None = None,
+             priority: int = 1) -> bool:
+    try:
+        project_id = get_project_id(api, project_name)
+        if project_id == -1:
+            raise RuntimeError(f'No project with name {project_name} found.')
+        api.add_task(content=content, project_id=project_id, due_date=due_date, description=description,
+                     priority=priority)
+        logger.logger.debug(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                         action=f"Successfully added task '{content}' "
+                                                                f"to project '{project_name}'."))
+        return True
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
+                                         action=f"Attempt to add task '{content}' to project '{project_name}'."))
+        return False
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=err,
+                                         action=f"Attempt to add task '{content}' to project '{project_name}'."))
+        return False
+
+
+def get_task_description(api: TodoistAPI, content: str, project_name: str) -> str | None:
+    try:
+        project_id = get_project_id(api, project_name)
+        if project_id == -1:
+            raise RuntimeError(f'No project with name {project_name} found.')
+
+        tasks = api.get_tasks(project_id=project_id)
+        res = []
+        for task in tasks:
+            if task.content == content:
+                res.append(task.description)
+        if len(res) == 1:
+            logger.logger.debug(
+                logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                             action=f"Successfully got task description for task '{content}' "
+                                                    f"from project '{project_name}'."))
+            return res[0]
+        elif len(res) == 0:
+            logger.logger.info(
+                logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                             action=f"Failed to get task description for task '{content}' "
+                                                    f"from project '{project_name}': no task found."))
+            return None
+        else:
+            logger.logger.info(
+                logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                             action=f"Failed to get task description for task '{content}' "
+                                                    f"from project '{project_name}': too many tasks found ({len(res)})."))
+            return None
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
+                                         action=f"Attempt to add task '{content}' to project '{project_name}'."))
         return None
-
-
-help_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-help_markup.add(types.KeyboardButton("/help"))
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=err,
+                                         action=f"Attempt to add task '{content}' to project '{project_name}'."))
+        return None
 
 
 @bot.message_handler(commands=["start"])
-def start(message):
+def start(message=None):
+    help_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    help_markup.add(types.KeyboardButton("/help"))
     bot.send_message(message.chat.id, f"Hello, {message.from_user.full_name}!",
                      reply_markup=help_markup)
     mesg = bot.send_message(message.chat.id,
@@ -186,9 +382,12 @@ def auth(message):
     help(message)
 
 
-def update_task(api, old_content, project_name, due_date=None, description=None, priority=1, new_content=None):
+def update_task(api: TodoistAPI, old_content: str, project_name: str, due_date=None, description: str | None = None,
+                priority: int = 1, new_content: str | None = None) -> bool:
     try:
         project_id = get_project_id(api, project_name)
+        if project_id == -1:
+            raise RuntimeError(f'No project with name {project_name} found.')
         task_id = get_task_id(api, old_content, project_name)
         if new_content:
             api.update_task(task_id=task_id, content=old_content, project_id=project_id, due_date=due_date,
@@ -196,8 +395,21 @@ def update_task(api, old_content, project_name, due_date=None, description=None,
         else:
             api.update_task(task_id=task_id, content=new_content, project_id=project_id, due_date=due_date,
                             description=description, priority=priority)
-    except Exception as error:
-        return error
+        logger.logger.debug(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                         action=f"Successfully updated task update task '{old_content}' "
+                                                f"from project '{project_name}'."))
+        return True
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
+                                         action=f"Attempt to update task '{old_content}' from project '{project_name}'."))
+        return False
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=err,
+                                         action=f"Attempt to update task '{old_content}' from project '{project_name}'."))
+        return False
 
 
 @bot.message_handler(commands=["help"])
@@ -209,8 +421,7 @@ def help(message):
     markup.add(types.InlineKeyboardButton("Добавить проект", callback_data='add_project'))
     markup.add(types.InlineKeyboardButton("Изменить имя проекта", callback_data='rename_project'))
     markup.add(types.InlineKeyboardButton("Получить задания из проекта", callback_data='get_tasks'))
-    markup.add(types.InlineKeyboardButton("Получить задания на сегодня из проекта",
-                                          callback_data='get_tasks_today'))
+    markup.add(types.InlineKeyboardButton("Получить задания на сегодня из проекта", callback_data='get_tasks_today'))
     markup.add(types.InlineKeyboardButton("Закрыть задание", callback_data='close_task'))
     markup.add(types.InlineKeyboardButton("Создать задание", callback_data='add_task'))
     markup.add(types.InlineKeyboardButton("Посмотреть описание задания", callback_data='get_description'))
@@ -294,14 +505,21 @@ def write_tasks(message, get_prefix, set_prefix):
 @bot.message_handler(func=lambda message: message.text.startswith("Close project: "))
 def del_proj_id(message):
     api = get_api(message.chat.id)
-    delete_project(api, message.text[len("Close project: "):])
-    bot.send_message(message.chat.id, f'Проект "{message.text[len("Close project: "):]}" удален')
+    project_name = message.text[len("Close project: "):]
+    is_successful = delete_project(api, project_name)
+    if is_successful:
+        bot.send_message(message.chat.id, f'Проект "{project_name}" удален')
+    else:
+        bot.send_message(message.chat.id, f'Упс, что-то пошло не так')
 
 
 def add_proj(message):
     api = get_api(message.chat.id)
-    add_project(api, message.text)
-    bot.send_message(message.chat.id, f'Проект "{message.text}" добавлен')
+    is_successful = add_project(api, message.text, message.chat.id)
+    if is_successful:
+        bot.send_message(message.chat.id, f'Проект "{message.text}" добавлен')
+    else:
+        bot.send_message(message.chat.id, 'Упс, что-то пошло не так')
 
 
 @bot.message_handler(func=lambda message: message.text.startswith("Change name: "))
@@ -313,7 +531,11 @@ def rename_proj(message):
 
 def add_proj_set_new(message):
     api = get_api(message.chat.id)
-    rename_project(api, old_name_dict[message.chat.id], message.text)
+    is_successful = rename_project(api, old_name_dict[message.chat.id], message.text)
+    if not is_successful:
+        bot.send_message(message.chat.id,
+                         f'Упс, не удалось переименовать проект "{old_name_dict[message.chat.id]}" в "{message.text}"', )
+        return
     markup = types.ReplyKeyboardMarkup()
     markup.add("/help")
     bot.send_message(message.chat.id, f'Проект "{old_name_dict[message.chat.id]}" переименован в "{message.text}"',
@@ -371,12 +593,17 @@ def close_task_proj(message: telebot.types.Message):
 @bot.message_handler(func=lambda message: message.text.startswith("Close: "))
 def close_task_task(message: telebot.types.Message):
     api = get_api(message.chat.id)
-    close_task(api, message.text[len("Close: "):], project_dict[message.chat.id])
     markup = types.ReplyKeyboardMarkup()
     markup.add("/help")
-    bot.send_message(message.chat.id, f'Задача "{message.text[len("Close: "):]}" из проекта '
-                                      f'"{project_dict[message.chat.id][len("Close task from: "):]}" закрыта',
-                     reply_markup=markup)
+    is_success = close_task(api, message.text[len("Close: "):], project_dict[message.chat.id])
+    if is_success:
+        bot.send_message(message.chat.id, f'Задача "{message.text[len("Close: "):]}" из проекта '
+                                          f'"{project_dict[message.chat.id][len("Close task from: "):]}" закрыта',
+                         reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id, f'Не удалось закрыть задачу "{message.text[len("Close: "):]}" из проекта '
+                                          f'"{project_dict[message.chat.id][len("Close task from: "):]}"',
+                         reply_markup=markup)
     project_dict.pop(message.chat.id)
 
 
@@ -403,7 +630,6 @@ def add_task_date(message):
 def add_task_deadline(message):
     dd_dict[message.chat.id] = message.text if message.text != INF_TASK_SYMB else None
     mesg = bot.send_message(message.chat.id, 'Введите приоритет (целое число от 1 до 4)\n')
-    # try-except
     bot.register_next_step_handler(mesg, add_task_wrapper)
 
 
@@ -412,12 +638,11 @@ def add_task_wrapper(message):
     markup = types.ReplyKeyboardMarkup()
     markup.add("/help")
     try:
-        current_func = traceback.extract_stack()[-1][2]
         try:
             priority = int(message.text)
         except ValueError:
             logger.logger.warning(
-                logger.make_logging_log_text(func_name=current_func,
+                logger.make_logging_log_text(func_name='add_task_wrapper',
                                              username=message.from_user.username,
                                              system_message='Something went wrong with priority of the task.',
                                              action=f"Attempt to add task '{task_dict[message.chat.id]}'"
@@ -431,7 +656,7 @@ def add_task_wrapper(message):
                          f'Задача "{task_dict[message.chat.id]}" добавлена в проект "{project_dict[message.chat.id]}"',
                          reply_markup=markup)
         logger.logger.debug(
-            logger.make_logging_log_text(func_name=current_func,
+            logger.make_logging_log_text(func_name='add_task_wrapper',
                                          username=message.from_user.username,
                                          action=f"Task '{task_dict[message.chat.id]}' has been successfully added "
                                                 f"to project '{project_dict[message.chat.id]}'"))
@@ -440,16 +665,14 @@ def add_task_wrapper(message):
         desc_dict.pop(message.chat.id)
         dd_dict.pop(message.chat.id)
     except Warning as warn:
-        current_func = traceback.extract_stack()[-1][2]
         logger.logger.warning(
-            logger.make_logging_log_text(func_name=current_func, system_message=warn,
+            logger.make_logging_log_text(func_name='add_task_wrapper', system_message=warn,
                                          username=message.from_user.username, message_text=message.text,
                                          action=f"Task '{task_dict[message.chat.id]}' has been successfully added "
                                                 f"to project '{project_dict[message.chat.id]}'"))
     except Exception as err:
-        current_func = traceback.extract_stack()[-1][2]
         logger.logger.error(
-            logger.make_logging_err_text(func_name=current_func, error=err, username=message.from_user.username,
+            logger.make_logging_err_text(func_name='add_task_wrapper', error=err, username=message.from_user.username,
                                          message_text=message.text,
                                          action=f"Attempt to add task '{task_dict[message.chat.id]}'"
                                                 f"to project '{project_dict[message.chat.id]}'"))
@@ -460,21 +683,18 @@ def get_desc_proj(message):
     try:
         desc_dict[message.chat.id] = message.text[len("Get description from: "):]
         write_tasks(message, "Get description from: ", "Task description: ")
-        current_func = traceback.extract_stack()[-1][2]
         logger.logger.debug(
-            logger.make_logging_log_text(func_name=current_func,
+            logger.make_logging_log_text(func_name='get_desc_proj',
                                          username=message.from_user.username,
                                          action='Input of project\'s name for future getting description of a task.'))
     except Warning as warn:
-        current_func = traceback.extract_stack()[-1][2]
         logger.logger.warning(
-            logger.make_logging_log_text(func_name=current_func, system_message=warn,
+            logger.make_logging_log_text(func_name='get_desc_proj', system_message=warn,
                                          username=message.from_user.username, message_text=message.text,
                                          action='Input of project\'s name for future getting description of a task.'))
     except Exception as err:
-        current_func = traceback.extract_stack()[-1][2]
         logger.logger.error(
-            logger.make_logging_err_text(func_name=current_func, error=err, username=message.from_user.username,
+            logger.make_logging_err_text(func_name='get_desc_proj', error=err, username=message.from_user.username,
                                          message_text=message.text,
                                          action='Input of project\'s name for future getting description of a task.'))
 
@@ -501,7 +721,8 @@ def get_desc_task(message):
 
 @bot.message_handler(func=lambda message: message.text.startswith("Project: "))
 def modify_task(message: telebot.types.Message):
-    tasks = get_tasks(message.text[9:])
+    api = get_api(message.chat.id)
+    tasks = get_tasks(api, message.text[9:])
     select_proj_dict[message.chat.id] = message.text[9:]
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
     for task in tasks:
@@ -530,13 +751,17 @@ def content_handler(message: telebot.types.Message):
 
 def modify_content(message):
     api = get_api(message.chat.id)
-    update_task(api, old_content=select_task_dict[message.chat.id], project_name=select_proj_dict[message.chat.id],
-                new_content=message.text)
+    is_success = update_task(api=api, old_content=select_task_dict[message.chat.id],
+                             project_name=select_proj_dict[message.chat.id],
+                             new_content=message.text)
     select_task_dict.pop(message.chat.id)
     select_proj_dict.pop(message.chat.id)
     markup = types.ReplyKeyboardMarkup()
     markup.add("/help")
-    bot.send_message(message.chat.id, "Задание успешно переименовано", reply_markup=markup)
+    if is_success:
+        bot.send_message(message.chat.id, "Задание успешно переименовано", reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id, "Упс, что-то пошло не так", reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: message.text.startswith("Description"))
@@ -547,13 +772,17 @@ def description_handler(message: telebot.types.Message):
 
 def modify_description(message):
     api = get_api(message.chat.id)
-    update_task(api=api, old_content=select_task_dict[message.chat.id], project_name=select_proj_dict[message.chat.id],
-                description=message.text)
+    is_success = update_task(api=api, old_content=select_task_dict[message.chat.id],
+                             project_name=select_proj_dict[message.chat.id],
+                             description=message.text)
     select_task_dict.pop(message.chat.id)
     select_proj_dict.pop(message.chat.id)
     markup = types.ReplyKeyboardMarkup()
     markup.add("/help")
-    bot.send_message(message.chat.id, "Описание задания успешно изменено", reply_markup=markup)
+    if is_success:
+        bot.send_message(message.chat.id, "Описание задания успешно изменено", reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id, "Упс, что-то пошло не так", reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: message.text.startswith("Deadline"))
@@ -566,18 +795,20 @@ def deadline_handler(message: telebot.types.Message):
 def modify_deadline(message):
     api = get_api(message.chat.id)
     if message.text == '-':
-        update_task(api=api, old_content=select_task_dict[message.chat.id],
-                    project_name=select_proj_dict[message.chat.id],
-                    due_date=None)
+        is_success = update_task(api=api, old_content=select_task_dict[message.chat.id],
+                                 project_name=select_proj_dict[message.chat.id])
     else:
-        update_task(api=api, old_content=select_task_dict[message.chat.id],
-                    project_name=select_proj_dict[message.chat.id],
-                    due_date=message.text)
+        is_success = update_task(api=api, old_content=select_task_dict[message.chat.id],
+                                 project_name=select_proj_dict[message.chat.id],
+                                 due_date=message.text)
     select_task_dict.pop(message.chat.id)
     select_proj_dict.pop(message.chat.id)
     markup = types.ReplyKeyboardMarkup()
     markup.add("/help")
-    bot.send_message(message.chat.id, "Дедлайн задания успешно изменен", reply_markup=markup)
+    if is_success:
+        bot.send_message(message.chat.id, "Дедлайн задания успешно изменен", reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id, "Упс, что-то пошло не так", reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: message.text.startswith("Priority"))
@@ -588,13 +819,17 @@ def priority_handler(message: telebot.types.Message):
 
 def modify_priority(message):
     api = get_api(message.chat.id)
-    update_task(api=api, old_content=select_task_dict[message.chat.id], project_name=select_proj_dict[message.chat.id],
-                priority=message.text)
+    is_success = update_task(api=api, old_content=select_task_dict[message.chat.id],
+                             project_name=select_proj_dict[message.chat.id],
+                             priority=message.text)
     select_task_dict.pop(message.chat.id)
     select_proj_dict.pop(message.chat.id)
     markup = types.ReplyKeyboardMarkup()
     markup.add("/help")
-    bot.send_message(message.chat.id, "Приоритет задания успешно изменен", reply_markup=markup)
+    if is_success:
+        bot.send_message(message.chat.id, "Приоритет задания успешно изменен", reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id, "Упс, что-то пошло не так", reply_markup=markup)
 
 
 bot.infinity_polling()
