@@ -722,8 +722,8 @@ def get_tasks_today_bot(message: telebot.types.Message):
     try:
         api = get_api(message.chat.id)
         bot.send_message(message.chat.id,
-                         f'Задачи из проекта "{message.text[26:]}" на сегодня: '
-                         f'{str([el.content for el in tasks_today(api, message.text)])}')
+                         f'Задачи из проекта "{message.text[len("Get tasks for today from: "):]}" на сегодня: '
+                         f'{str([el.content for el in tasks_today(api, message.text[len("Get tasks for today from: "):])])}')
     except Warning as warn:
         logger.logger.warning(
             logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
