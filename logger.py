@@ -15,9 +15,11 @@ class ErrorFilter(logging.Filter):
         return record.levelno >= logging.ERROR
 
 
-def make_logging_err_text(error, func_name, action=None, username=None, message_text=None) -> str:
+def make_logging_err_text(error, func_name, action=None, username=None, message_text=None, chat_id=None) -> str:
     logging_text = (f"Error occured in function {func_name}. Error class: {error.__class__.__name__}.\n"
                     f"Error message:\n{''.join(traceback.format_exception(type(error), error, error.__traceback__))}\n")
+    if chat_id:
+        logging_text += f"Chat_id: {chat_id}. "
     if action:
         logging_text += f"User's action: {action} "
     if username:
@@ -28,11 +30,14 @@ def make_logging_err_text(error, func_name, action=None, username=None, message_
     return logging_text
 
 
-def make_logging_log_text(func_name, system_message=None, action=None, username=None, message_text=None) -> str:
+def make_logging_log_text(func_name, system_message=None, action=None, username=None, message_text=None,
+                          chat_id=None) -> str:
     logging_text = f"Function {func_name}."
     if system_message:
         logging_text += f'System info: {system_message}.'
     logging_text += '\n'
+    if chat_id:
+        logging_text += f"Chat_id: {chat_id}. "
     if action:
         logging_text += f"User's action: {action} "
     if username:
