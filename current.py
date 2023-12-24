@@ -13,7 +13,7 @@ TEST_TOKEN = '48107fa1de46acc615b78411cea73524a10bb75b'
 # api = TodoistAPI(TEST_TOKEN)
 
 api_token = '6573328063:AAGYz8MHyQoLR7d7rO7Yd3eZE_rgeRrEG_0'
-bot = telebot.TeleBot(api_token, exception_handler=logger.ExcHandler())
+bot = telebot.TeleBot(api_token)
 users_database = pd.read_csv('users.csv')
 
 old_name_dict = dict()  # chat id to old name
