@@ -62,29 +62,3 @@ handler_err.addFilter(ErrorFilter())
 handler_err.setFormatter(logging.Formatter(fmt="%(asctime)s %(name)s %(levelname)s. %(message)s\n"
                                                "_________________________________________________\n"))
 logger.addHandler(handler_err)
-
-
-class ExcHandler:
-    def handle(self, e):
-        if isinstance(e, Warning):
-            ...
-        elif isinstance(e, Exception):
-            ...
-
-
-class ExceptionWithUserInfo(Exception):
-    def __init__(self, error, func_name, action=None, username=None, message_text=None):
-        self.error = error
-        self.func_name = func_name
-        self.action = action
-        self.username = username
-        self.message_text = message_text
-
-
-class WarningWithUserInfo(Warning):
-    def __init__(self, system_message, func_name, action=None, username=None, message_text=None):
-        self.system_message = system_message
-        self.func_name = func_name
-        self.action = action
-        self.username = username
-        self.message_text = message_text

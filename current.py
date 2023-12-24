@@ -108,6 +108,8 @@ def add_project(api: TodoistAPI, name: str, chat_id: int, parent_name: str | Non
                 color="charcoal") -> bool:
     try:
         res = get_projects_names(api)
+        if res is None:
+            return False
         if len(res) >= 7:
             logger.logger.info(
                 logger.make_logging_log_text(func_name='add_project', chat_id=chat_id,
@@ -117,8 +119,9 @@ def add_project(api: TodoistAPI, name: str, chat_id: int, parent_name: str | Non
             return False
         parent_id = get_project_id(api, parent_name)
         if parent_id == '-':
-            raise RuntimeError(f'No project with name {parent_name} found.')
-        api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
+            api.add_project(name=name, view_style=view_style, color=color)
+        else:
+            api.add_project(name=name, parent_id=parent_id, view_style=view_style, color=color)
         logger.logger.debug(
             logger.make_logging_log_text(func_name='add_project', chat_id=chat_id,
                                          action=f"Successfully added project '{name}'"))
@@ -126,17 +129,17 @@ def add_project(api: TodoistAPI, name: str, chat_id: int, parent_name: str | Non
 
     except Warning as warn:
         logger.logger.warning(
-            logger.make_logging_log_text(func_name='add_project', system_message=warn,
+            logger.make_logging_log_text(func_name='add_project', system_message=warn, chat_id=chat_id,
                                          action=f"Attempt to add project '{name}'."))
         return False
     except Exception as err:
         logger.logger.error(
-            logger.make_logging_err_text(func_name='add_project', error=err,
+            logger.make_logging_err_text(func_name='add_project', error=err,chat_id=chat_id,
                                          action=f"Attempt to add project '{name}'."))
         return False
 
 
-def get_projects_names(api: TodoistAPI, url: bool = False) -> list:
+def get_projects_names(api: TodoistAPI, url: bool = False) -> list|None:
     try:
         projects = api.get_projects()
         if url:
@@ -152,12 +155,12 @@ def get_projects_names(api: TodoistAPI, url: bool = False) -> list:
         logger.logger.warning(
             logger.make_logging_log_text(func_name='get_projects_names', system_message=warn,
                                          action=f"Attempt to get names of projects."))
-        return []
+        return None
     except Exception as err:
         logger.logger.error(
             logger.make_logging_err_text(func_name='get_projects_names', error=err,
                                          action=f"Attempt to get names of projects."))
-        return []
+        return None
 
 
 def rename_project(api: TodoistAPI, old_name: str, new_name: str) -> bool:
@@ -169,7 +172,7 @@ def rename_project(api: TodoistAPI, old_name: str, new_name: str) -> bool:
         if is_success:
             logger.logger.info(
                 logger.make_logging_log_text(func_name='rename_project',
-                                             action=f"Failed to rename project '{old_name}' to '{new_name}'."))
+                                             action=f"Renamed project '{old_name}' to '{new_name}'."))
         else:
             logger.logger.debug(
                 logger.make_logging_log_text(func_name='rename_project',
@@ -377,7 +380,6 @@ def start(message: telebot.types.Message | None = None):
 
 def auth(message: telebot.types.Message):
     global users_database
-    print(type(message))
     chat_id = message.chat.id
     new_token = message.text
 
@@ -389,6 +391,7 @@ def auth(message: telebot.types.Message):
         line_id = users_database[users_database['chat_id'] == chat_id].index[0]
         users_database.iloc[line_id, 1] = new_token
     users_database.to_csv('users.csv', header=True, index=False, sep=',')
+    get_api(message.chat.id)
     bot.send_message(message.chat.id, 'Авторизация прошла успешно')
     help(message)
 
@@ -489,13 +492,16 @@ def callback_message(callback):
         output = ''
         try:
             api = get_api(callback.message.chat.id)
-            for el in get_projects_names(api):
+            projects_names = get_projects_names(api)
+            if projects_names is None:
+                raise BaseException
+            for el in projects_names:
                 output += el + '\n'
             bot.send_message(callback.message.chat.id, f'Ваши проекты: \n {str(output)}')
         except Exception as err:
             logger.logger.error(
                 logger.make_logging_err_text(func_name=traceback.extract_stack()[-1][2], error=err,
-                                             chat_id=callback.message.chat.id,
+                                             chat_id=callback.message.chat.id, username=callback.message.chat.username,
                                              action=f"Attempt to get all projects"))
     elif callback.data == 'modify_task':
         bot.send_message(callback.message.chat.id, '__*\> Изменить задание:*__', 'MarkdownV2')
@@ -506,6 +512,9 @@ def write_projects(chat_id, prefix):
     try:
         api = get_api(chat_id)
         projects = get_projects_names(api)
+        if projects is None:
+            bot.send_message(chat_id, 'Упс, что-то пошло не так.')
+            raise BaseException
         markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
         if len(projects) == 0:
             logger.logger.debug(
@@ -578,12 +587,12 @@ def del_proj_id(message: telebot.types.Message):
         if is_successful:
             bot.send_message(message.chat.id, f'Проект "{project_name}" удален')
             logger.logger.debug(
-                logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], chat_id=message.chat.id,
                                              username=message.chat.username, message_text=message.text,
                                              action=f"Successfully deleted project '{project_name}'"))
         else:
             logger.logger.info(
-                logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],chat_id=message.chat.id,
                                              username=message.chat.username, message_text=message.text,
                                              action=f"Failed to delete project '{project_name}'"))
             bot.send_message(message.chat.id, f'Упс, что-то пошло не так')
@@ -593,7 +602,7 @@ def del_proj_id(message: telebot.types.Message):
         logger.logger.warning(
             logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
                                          username=message.chat.username, message_text=message.text,
-                                         action=f"Attempt to delete project"))
+                                         chat_id=message.chat.id, action=f"Attempt to delete project"))
     except Exception as err:
         logger.logger.error(
             logger.make_logging_err_text(func_name=traceback.extract_stack()[-1][2], error=err,
@@ -609,7 +618,7 @@ def add_proj(message: telebot.types.Message):
             bot.send_message(message.chat.id, f'Проект "{message.text}" добавлен')
             logger.logger.debug(
                 logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
-                                             username=message.chat.username,
+                                             username=message.chat.username, chat_id=message.chat.id,
                                              action=f"Successfully added project '{message.text}'"))
         else:
             bot.send_message(message.chat.id, 'Упс, что-то пошло не так')
@@ -739,7 +748,7 @@ def get_tasks_today_bot(message: telebot.types.Message):
 
 @bot.message_handler(func=lambda message: message.text.startswith("Close task from: "))
 def close_task_proj(message: telebot.types.Message):
-    project_dict[message.chat.id] = message.text
+    project_dict[message.chat.id] = message.text[len("Close task from: "):]
     write_tasks(message, "Close task from: ", "Close: ")
 
 
@@ -875,21 +884,22 @@ def get_desc_proj(message: telebot.types.Message):
 def get_desc_task(message: telebot.types.Message):
     try:
         api = get_api(message.chat.id)
+        content = message.text[len("Task description: "):]
         desc = get_task_description(api=api, project_name=desc_dict[message.chat.id],
-                                    content=message.text[len("Task description: "):])
+                                    content=content)
         markup = types.ReplyKeyboardMarkup()
         markup.add("/help")
         if desc:
             logger.logger.debug(
                 logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], username=message.chat.username,
-                                             chat_id=message.chat.id,
-                                             action=f"Got description for task {message.text} from project "
+                                             chat_id=message.chat.id, message_text=message.text,
+                                             action=f"Got description for task {content} from project "
                                                     f"{desc_dict[message.chat.id]}."))
-            bot.send_message(message.chat.id, f'Описание задачи "{message.text[len("Task description: "):]}": '
+            bot.send_message(message.chat.id, f'Описание задачи "{content}": '
                                               f'"{desc}"', reply_markup=markup)
         else:
             bot.send_message(message.chat.id,
-                             f"Извините, задача '{message.text}' в проекте '{desc_dict[message.chat.id]}' не найдена.",
+                             f"Извините, задача '{content}' в проекте '{desc_dict[message.chat.id]}' не найдена.",
                              reply_markup=markup)
             logger.logger.info(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
                                                             action='User tried to get description for a non-existing task.',
@@ -899,13 +909,13 @@ def get_desc_task(message: telebot.types.Message):
         logger.logger.warning(
             logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
                                          username=message.chat.username, chat_id=message.chat.id,
-                                         action=f"Attempt to get description for task {message.text} "
+                                         action=f"Attempt to get description for task {content} "
                                                 f"from project {desc_dict[message.chat.id]}."))
     except Exception as err:
         logger.logger.error(
             logger.make_logging_err_text(func_name=traceback.extract_stack()[-1][2], error=err,
                                          username=message.chat.username, chat_id=message.chat.id,
-                                         action=f"Attempt to get description for task {message.text} "
+                                         action=f"Attempt to get description for task {content} "
                                                 f"from project {desc_dict[message.chat.id]}."))
 
 
@@ -931,8 +941,7 @@ def modify_task(message: telebot.types.Message):
         logger.logger.error(
             logger.make_logging_err_text(func_name=traceback.extract_stack()[-1][2], error=err,
                                          username=message.chat.username, chat_id=message.chat.id,
-                                         action=f"Attempt to get description for task {message.text} "
-                                                f"from project {desc_dict[message.chat.id]}."))
+                                         action=f"Attempt to make buttons for tasks from project {message.text[9:]}."))
 
 
 @bot.message_handler(func=lambda message: message.text.startswith("Task: "))
