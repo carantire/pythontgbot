@@ -62,3 +62,4 @@ handler_err.addFilter(ErrorFilter())
 handler_err.setFormatter(logging.Formatter(fmt="%(asctime)s %(name)s %(levelname)s. %(message)s\n"
                                                "_________________________________________________\n"))
 logger.addHandler(handler_err)
+
