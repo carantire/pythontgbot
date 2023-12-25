@@ -798,13 +798,13 @@ def get_tasks_fordate_handler(message: telebot.types.Message):
         logger.logger.warning(
             logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
                                          username=message.chat.username, message_text=message.text,
-                                         chat_id=message.chat.id, action=f"Attempt to take tasks for today"))
+                                         chat_id=message.chat.id, action=f"Attempt to take tasks for particular day"))
     except Exception as err:
         bot.send_message(message.chat.id, 'Упс, что-то пошло не так.')
         logger.logger.error(
             logger.make_logging_err_text(func_name=traceback.extract_stack()[-1][2], error=err,
                                          username=message.chat.username, message_text=message.text,
-                                         chat_id=message.chat.id, action=f"Attempt to take tasks for today"))
+                                         chat_id=message.chat.id, action=f"Attempt to take tasks for particular day"))
 def get_tasks_fordate_bot(message: telebot.types.Message):
     api = get_api(message.chat.id)
     tasks = []
