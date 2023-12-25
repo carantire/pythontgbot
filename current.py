@@ -23,6 +23,7 @@ desc_dict = dict()
 dd_dict = dict()
 select_proj_dict = dict()  # for func modify
 select_task_dict = dict()  # for func modify
+select_project_fordate_dict = dict() #for func get tasks for date
 INF_TASK_SYMB = "-"
 API_DATE_FORMAT = "%Y-%m-%d"
 
@@ -238,6 +239,33 @@ def tasks_today(api: TodoistAPI, project_name: str) -> list:
                                          action=f"Attempt to get tasks for today from project {project_name}."))
         return []
 
+def tasks_for_date(api: TodoistAPI, project_name: str, cur_date: str) -> list:
+    try:
+        project_id = get_project_id(api, project_name)
+        if project_id == '-':
+            raise RuntimeError(f'No project with name {project_name} found.')
+        tasks = api.get_tasks(project_id=project_id)
+        res_date = datetime.strptime(cur_date, "%Y-%m-%d").date()
+        for_date_tasks = []
+        for task in tasks:
+            res = task.due
+            if res:
+                if task.due.date == str(res_date):
+                    for_date_tasks.append(task)
+        logger.logger.debug(logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
+                                                         action=f"Got all tasks for today from project '{project_name}'."))
+        return for_date_tasks
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name='tasks_fordate', system_message=warn,
+                                         action=f"Attempt to get tasks for today from project {project_name}."))
+        return []
+    except Exception as err:
+        logger.logger.error(
+            logger.make_logging_err_text(func_name='tasks_fordate', error=err,
+                                         action=f"Attempt to get tasks for today from project {project_name}."))
+        return []
+
 
 def get_task_id(api: TodoistAPI, content: str, project_name: str) -> str:
     try:
@@ -443,6 +471,7 @@ def help(message: telebot.types.Message):
     markup.add(types.InlineKeyboardButton("Изменить имя проекта", callback_data='rename_project'))
     markup.add(types.InlineKeyboardButton("Получить задания из проекта", callback_data='get_tasks'))
     markup.add(types.InlineKeyboardButton("Получить задания на сегодня из проекта", callback_data='get_tasks_today'))
+    markup.add(types.InlineKeyboardButton("Получить задания на конкретный день из проекта", callback_data='get_tasks_for_date'))
     markup.add(types.InlineKeyboardButton("Закрыть задание", callback_data='close_task'))
     markup.add(types.InlineKeyboardButton("Создать задание", callback_data='add_task'))
     markup.add(types.InlineKeyboardButton("Посмотреть описание задания", callback_data='get_description'))
@@ -478,6 +507,10 @@ def callback_message(callback):
         bot.send_message(callback.message.chat.id, '__*\> Получить задания на сегодня из проекта:*__',
                          'MarkdownV2')
         write_projects(callback.message.chat.id, "Get tasks for today from: ")
+    elif callback.data == 'get_tasks_for_date':
+        bot.send_message(callback.message.chat.id, '__*\> Получить задания на конкретную дату из проекта:*__',
+                         'MarkdownV2')
+        write_projects(callback.message.chat.id, "Get tasks for date from: ")
     elif callback.data == 'close_task':
         bot.send_message(callback.message.chat.id, '__*\> Закрыть задание:*__', 'MarkdownV2')
         write_projects(callback.message.chat.id, "Close task from: ")
@@ -583,9 +616,12 @@ def del_proj_id(message: telebot.types.Message):
     try:
         api = get_api(message.chat.id)
         project_name = message.text[len("Close project: "):]
+
         is_successful = delete_project(api, project_name)
         if is_successful:
-            bot.send_message(message.chat.id, f'Проект "{project_name}" удален')
+            markup = types.ReplyKeyboardMarkup()
+            markup.add("/help")
+            bot.send_message(message.chat.id, f'Проект "{project_name}" удален', reply_markup=markup)
             logger.logger.debug(
                 logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], chat_id=message.chat.id,
                                              username=message.chat.username, message_text=message.text,
@@ -615,7 +651,9 @@ def add_proj(message: telebot.types.Message):
         api = get_api(message.chat.id)
         is_successful = add_project(api, message.text, message.chat.id)
         if is_successful:
-            bot.send_message(message.chat.id, f'Проект "{message.text}" добавлен')
+            markup = types.ReplyKeyboardMarkup()
+            markup.add("/help")
+            bot.send_message(message.chat.id, f'Проект "{message.text}" добавлен', reply_markup=markup)
             logger.logger.debug(
                 logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2],
                                              username=message.chat.username, chat_id=message.chat.id,
@@ -730,7 +768,12 @@ def get_tasks_bot(message: telebot.types.Message):
 def get_tasks_today_bot(message: telebot.types.Message):
     try:
         api = get_api(message.chat.id)
-        bot.send_message(message.chat.id,
+        markup = types.ReplyKeyboardMarkup()
+        markup.add("/help")
+        if len(tasks_today(api, message.text[len("Get tasks for today from: "):])) == 0:
+            bot.send_message(message.chat.id, f'На сегодня задач из проекта {message.text[len("Get tasks for today from: "):]} нет', reply_markup=markup)
+        else:
+            bot.send_message(message.chat.id,
                          f'Задачи из проекта "{message.text[len("Get tasks for today from: "):]}" на сегодня: '
                          f'{str([el.content for el in tasks_today(api, message.text[len("Get tasks for today from: "):])])}')
     except Warning as warn:
@@ -744,6 +787,47 @@ def get_tasks_today_bot(message: telebot.types.Message):
             logger.make_logging_err_text(func_name=traceback.extract_stack()[-1][2], error=err,
                                          username=message.chat.username, message_text=message.text,
                                          chat_id=message.chat.id, action=f"Attempt to take tasks for today"))
+
+@bot.message_handler(func=lambda message: message.text.startswith("Get tasks for date from: "))
+def get_tasks_fordate_handler(message: telebot.types.Message):
+    try:
+        select_project_fordate_dict[message.chat.id] = message.text[len("Get tasks for date from: "):]
+        mesg = bot.send_message(message.chat.id, 'Введите дату в формате YYYY-MM-DD\n')
+        bot.register_next_step_handler(mesg, get_tasks_fordate_bot)
+    except Warning as warn:
+        logger.logger.warning(
+            logger.make_logging_log_text(func_name=traceback.extract_stack()[-1][2], system_message=warn,
+                                         username=message.chat.username, message_text=message.text,
+                                         chat_id=message.chat.id, action=f"Attempt to take tasks for today"))
+    except Exception as err:
+        bot.send_message(message.chat.id, 'Упс, что-то пошло не так.')
+        logger.logger.error(
+            logger.make_logging_err_text(func_name=traceback.extract_stack()[-1][2], error=err,
+                                         username=message.chat.username, message_text=message.text,
+                                         chat_id=message.chat.id, action=f"Attempt to take tasks for today"))
+def get_tasks_fordate_bot(message: telebot.types.Message):
+    api = get_api(message.chat.id)
+    tasks = []
+    for task in tasks_for_date(api, select_project_fordate_dict[message.chat.id], message.text):
+        if task.due is not None:
+            tasks.append(task)
+            continue
+        tasks.append(task)
+
+    output_with_dd = ""
+    iteration = 1
+    for task in tasks:
+        output_with_dd += f"({iteration}) " + task.content + (f", priority = {task.priority}\n")
+        iteration += 1
+    markup = types.ReplyKeyboardMarkup()
+    markup.add("/help")
+    if (len(output_with_dd) == 0):
+        bot.send_message(message.chat.id, f"В данном проекте нет заданий на дату {message.text}", reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id,
+                     f'Задачи из проекта "{select_project_fordate_dict[message.chat.id]} на дату {message.text}":\n' +
+                     "Приоритет: число от 1 до 4 (1 -- слабый приоритет, 4 -- самый сильный приоритет)\n" +
+                     output_with_dd, reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: message.text.startswith("Close task from: "))
@@ -765,7 +849,7 @@ def close_task_task(message: telebot.types.Message):
                                              username=message.chat.username, chat_id=message.chat.id,
                                              action=f"Successfully closed task"))
             bot.send_message(message.chat.id, f'Задача "{message.text[len("Close: "):]}" из проекта '
-                                              f'"{project_dict[message.chat.id][len("Close task from: "):]}" закрыта',
+                                              f'"{project_dict[message.chat.id]}" закрыта',
                              reply_markup=markup)
         else:
             logger.logger.info(

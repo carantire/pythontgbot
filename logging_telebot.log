@@ -1,4 +1,120 @@
-2023-12-14 21:46:54,312 logger_todoist_bot DEBUG. Function add_task_wrapper.
-User's action: Task 'rate' has been successfully added to project 'hehe' Username: carantire. 
+2023-12-25 12:43:59,558 logger_todoist_bot DEBUG. Function get_projects_names.
+User's action: Got names of projects. 
+_________________________________________________
+
+2023-12-25 12:43:59,568 logger_todoist_bot DEBUG. Function write_projects.
+Chat_id: 318301959. User's action: Made buttons of projects, prefix: Close task from: . 
+_________________________________________________
+
+2023-12-25 12:44:06,011 logger_todoist_bot DEBUG. Function get_project_id.
+User's action: Got id for project 'flow': 2324961046. 
+_________________________________________________
+
+2023-12-25 12:44:06,295 logger_todoist_bot DEBUG. Function get_tasks.
+User's action: Got all tasks from project 'flow'. 
+_________________________________________________
+
+2023-12-25 12:44:06,296 logger_todoist_bot DEBUG. Function write_tasks.
+Chat_id: 318301959. User's action: Attempt to make buttons of tasks, (2) found. get_prefix=Close task from: , set_prefix = Close: . Username: carantire. 
+_________________________________________________
+
+2023-12-25 12:44:08,468 logger_todoist_bot DEBUG. Function get_project_id.
+User's action: Got id for project 'flow': 2324961046. 
+_________________________________________________
+
+2023-12-25 12:44:09,489 logger_todoist_bot DEBUG. Function close_task.
+User's action: Successfully closed task with id 7531205631 from project flow. 
+_________________________________________________
+
+2023-12-25 12:44:09,489 logger_todoist_bot DEBUG. Function close_task_task.
+Chat_id: 318301959. User's action: Successfully closed task Username: carantire. 
+_________________________________________________
+
+2023-12-25 12:44:55,130 logger_todoist_bot DEBUG. Function get_projects_names.
+User's action: Got names of projects. 
+_________________________________________________
+
+2023-12-25 12:44:55,133 logger_todoist_bot DEBUG. Function write_projects.
+Chat_id: 318301959. User's action: Made buttons of projects, prefix: Add task to: . 
+_________________________________________________
+
+2023-12-25 12:45:09,497 logger_todoist_bot DEBUG. Function get_project_id.
+User's action: Got id for project 'flow': 2324961046. 
+_________________________________________________
+
+2023-12-25 12:45:10,521 logger_todoist_bot DEBUG. Function add_task.
+User's action: Successfully added task 'huuuuy' to project 'flow'. 
+_________________________________________________
+
+2023-12-25 12:45:10,628 logger_todoist_bot DEBUG. Function add_task_wrapper.
+User's action: Task 'huuuuy' has been successfully added to project 'flow' Username: carantire. 
+_________________________________________________
+
+2023-12-25 12:45:18,818 logger_todoist_bot DEBUG. Function get_projects_names.
+User's action: Got names of projects. 
+_________________________________________________
+
+2023-12-25 12:45:18,820 logger_todoist_bot DEBUG. Function write_projects.
+Chat_id: 318301959. User's action: Made buttons of projects, prefix: Get description from: . 
+_________________________________________________
+
+2023-12-25 12:45:21,686 logger_todoist_bot DEBUG. Function get_project_id.
+User's action: Got id for project 'flow': 2324961046. 
+_________________________________________________
+
+2023-12-25 12:45:22,243 logger_todoist_bot DEBUG. Function get_tasks.
+User's action: Got all tasks from project 'flow'. 
+_________________________________________________
+
+2023-12-25 12:45:22,243 logger_todoist_bot DEBUG. Function write_tasks.
+Chat_id: 318301959. User's action: Attempt to make buttons of tasks, (2) found. get_prefix=Get description from: , set_prefix = Task description: . Username: carantire. 
+_________________________________________________
+
+2023-12-25 12:45:22,360 logger_todoist_bot DEBUG. Function get_desc_proj.
+User's action: Input of project's name for future getting description of a task. Username: carantire. 
+_________________________________________________
+
+2023-12-25 12:45:24,355 logger_todoist_bot DEBUG. Function get_project_id.
+User's action: Got id for project 'flow': 2324961046. 
+_________________________________________________
+
+2023-12-25 12:45:24,783 logger_todoist_bot DEBUG. Function get_task_description.
+User's action: Successfully got task description for task 'huuuuy' from project 'flow'. 
+_________________________________________________
+
+2023-12-25 12:45:24,784 logger_todoist_bot DEBUG. Function get_desc_task.
+Chat_id: 318301959. User's action: Got description for task huuuuy from project flow. Username: carantire. User's message: Task description: huuuuy.
+_________________________________________________
+
+2023-12-25 12:47:17,665 logger_todoist_bot DEBUG. Function get_projects_names.
+User's action: Got names of projects. 
+_________________________________________________
+
+2023-12-25 12:47:17,666 logger_todoist_bot DEBUG. Function write_projects.
+Chat_id: 318301959. User's action: Made buttons of projects, prefix: Project: . 
+_________________________________________________
+
+2023-12-25 12:47:21,385 logger_todoist_bot DEBUG. Function get_project_id.
+User's action: Got id for project 'flow': 2324961046. 
+_________________________________________________
+
+2023-12-25 12:47:21,801 logger_todoist_bot DEBUG. Function get_tasks.
+User's action: Got all tasks from project 'flow'. 
+_________________________________________________
+
+2023-12-25 12:47:32,703 logger_todoist_bot DEBUG. Function get_project_id.
+User's action: Got id for project 'flow': 2324961046. 
+_________________________________________________
+
+2023-12-25 12:47:33,103 logger_todoist_bot DEBUG. Function get_project_id.
+User's action: Got id for project 'flow': 2324961046. 
+_________________________________________________
+
+2023-12-25 12:47:34,208 logger_todoist_bot DEBUG. Function update_task.
+User's action: Successfully updated task update task 'oo' from project 'flow'. 
+_________________________________________________
+
+2023-12-25 12:47:34,209 logger_todoist_bot DEBUG. Function modify_content.
+Chat_id: 318301959. User's action: Successfully renamed task Username: carantire. 
 _________________________________________________
 
